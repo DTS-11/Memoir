@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { Linking } from 'react-native';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { GlassView } from '../src/components/GlassView';

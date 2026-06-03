@@ -7,7 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from 'expo-router/tabs';
 import { GlassView } from './GlassView';
 import { useTheme } from '../theme/ThemeProvider';
 import { TabIcon, type TabIconName } from './TabIcon';
