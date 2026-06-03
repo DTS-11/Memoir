@@ -44,6 +44,19 @@
           "savePhotosPermission": "Memoir can save edits back to your library.",
           "isAccessMediaLocationEnabled": true
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/AppIcons/appstore.png",
+          "backgroundColor": "#FFFFFF",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/AppIcons/appstore.png",
+            "backgroundColor": "#000000"
+          }
+        }
       ]
     ],
     "experiments": {

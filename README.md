@@ -100,6 +100,59 @@ assets/
 - **iOS** — `NSPhotoLibraryUsageDescription` is set in `app.json`. Memoir supports the system "Selected Photos" mode.
 - **Android** — declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, and the legacy `READ_EXTERNAL_STORAGE`. Adaptive icons are wired through the `expo.android` config.
 
+## Releasing an Android build
+
+Memoir ships to users today via signed APKs attached to [GitHub Releases](https://github.com/DTS-11/Memoir/releases). The workflow at `.github/workflows/release.yml` runs on every `v*` tag push (or manually via the Actions tab) and produces a single `memoir-<version>.apk`.
+
+### One-time keystore setup
+
+You only need to do this once. The same keystore must be reused for every future release so that users can upgrade in place without uninstalling.
+
+1. **Generate a release keystore** locally (PowerShell on Windows; `keytool` ships with the JDK):
+   ```powershell
+   keytool -genkeypair -v `
+     -keystore memoir-release.keystore `
+     -alias memoir `
+     -keyalg RSA -keysize 2048 -validity 10000 -storetype JKS
+   ```
+   You will be asked for a **store password**, a **key password**, and identity details. Remember the passwords — there is no recovery.
+
+2. **Back the keystore up** somewhere safe (a password manager works). Losing it means you can never publish an update to anyone who already installed Memoir.
+
+3. **Base64-encode the keystore** so it can live as a GitHub Secret:
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("memoir-release.keystore")) `
+     | Set-Clipboard
+   ```
+
+4. **Add four GitHub repository secrets** under *Settings → Secrets and variables → Actions*:
+
+   | Secret name | Value |
+   | --- | --- |
+   | `ANDROID_KEYSTORE_BASE64` | The clipboard contents from step 3 |
+   | `ANDROID_KEYSTORE_PASSWORD` | The store password from step 1 |
+   | `ANDROID_KEY_ALIAS` | `memoir` (or whatever `-alias` you chose) |
+   | `ANDROID_KEY_PASSWORD` | The key password from step 1 |
+
+### Cutting a release
+
+```bash
+# Bump the version in app.json (expo.version) and package.json, then commit.
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions will:
+
+1. Install JS dependencies with Bun.
+2. Run `expo prebuild --platform android` to materialise the native Android project.
+3. Decode the release keystore from secrets into `android/app/release.keystore`.
+4. Patch `android/app/build.gradle` to wire the release signing config (see `scripts/patch-android-signing.mjs`).
+5. Build a signed release APK with `./gradlew assembleRelease`.
+6. Attach `memoir-<version>.apk` to a new GitHub Release with install instructions in the body.
+
+If anything is misconfigured, the workflow will fail loudly at the "Validate required secrets" step before doing any work.
+
 ---
 
 ## Contributing
