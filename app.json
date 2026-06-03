@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/AppIcons/appstore.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.memoir.app",
@@ -58,7 +57,8 @@
           }
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
