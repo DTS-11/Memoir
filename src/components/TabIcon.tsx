@@ -1,12 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 
-export type TabIconName = 'library' | 'sparkles' | 'albums' | 'search';
+export type TabIconName = "library" | "sparkles" | "albums" | "search";
 
 const map: Record<TabIconName, keyof typeof Ionicons.glyphMap> = {
-  library: 'images',
-  sparkles: 'sparkles',
-  albums: 'albums',
-  search: 'search',
+  library: "images",
+  sparkles: "sparkles",
+  albums: "albums",
+  search: "search",
 };
 
 export function TabIcon({

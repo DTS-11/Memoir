@@ -1,14 +1,14 @@
-import { useCallback, useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../../src/theme/ThemeProvider';
-import { PhotoGrid } from '../../src/components/PhotoGrid';
-import { TopGlassBar } from '../../src/components/TopGlassBar';
-import { EmptyState } from '../../src/components/EmptyState';
-import { usePhotos, type Photo } from '../../src/hooks/usePhotos';
-import { getCategory } from '../../src/utils/categories';
+import { useCallback, useMemo } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../src/theme/ThemeProvider";
+import { PhotoGrid } from "../../src/components/PhotoGrid";
+import { TopGlassBar } from "../../src/components/TopGlassBar";
+import { EmptyState } from "../../src/components/EmptyState";
+import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
+import { getCategory } from "../../src/utils/categories";
 
 export default function CategoryScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -19,11 +19,11 @@ export default function CategoryScreen() {
   const category = useMemo(() => (key ? getCategory(key) : undefined), [key]);
   const filtered = useMemo(
     () => (category ? photos.filter(category.match) : []),
-    [photos, category]
+    [photos, category],
   );
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: '/photo/[id]', params: { id: p.id } });
+    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
   }, []);
 
   const headerHeight = insets.top + 64;
@@ -62,10 +62,14 @@ export default function CategoryScreen() {
       <View pointerEvents="box-none" style={styles.topBlock}>
         <TopGlassBar
           title={category.label}
-          subtitle={`${filtered.length.toLocaleString()} item${filtered.length === 1 ? '' : 's'}`}
+          subtitle={`${filtered.length.toLocaleString()} item${filtered.length === 1 ? "" : "s"}`}
           right={
             <Pressable onPress={() => router.back()} hitSlop={10}>
-              <Ionicons name="chevron-back-circle" size={28} color={colors.accent} />
+              <Ionicons
+                name="chevron-back-circle"
+                size={28}
+                color={colors.accent}
+              />
             </Pressable>
           }
         />
@@ -76,5 +80,5 @@ export default function CategoryScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  topBlock: { position: 'absolute', top: 0, left: 0, right: 0 },
+  topBlock: { position: "absolute", top: 0, left: 0, right: 0 },
 });

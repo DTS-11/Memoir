@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
-const RELEASES_URL = 'https://api.github.com/repos/DTS-11/Memoir/releases/latest';
-const DISMISS_KEY = 'memoir:update-dismissed-version';
-const LAST_CHECK_KEY = 'memoir:update-last-check';
+const RELEASES_URL =
+  "https://api.github.com/repos/DTS-11/Memoir/releases/latest";
+const DISMISS_KEY = "memoir:update-dismissed-version";
+const LAST_CHECK_KEY = "memoir:update-last-check";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 export type UpdateInfo = {
@@ -16,10 +17,13 @@ export type UpdateInfo = {
 };
 
 function parseSemver(v: string): number[] {
-  return v.replace(/^v/i, '').split(/[\.\-]/).map((part) => {
-    const n = parseInt(part, 10);
-    return Number.isFinite(n) ? n : 0;
-  });
+  return v
+    .replace(/^v/i, "")
+    .split(/[\.\-]/)
+    .map((part) => {
+      const n = parseInt(part, 10);
+      return Number.isFinite(n) ? n : 0;
+    });
 }
 
 function isNewer(latest: string, current: string): boolean {
@@ -78,7 +82,7 @@ export function useAppUpdate() {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(RELEASES_URL, {
-          headers: { Accept: 'application/vnd.github+json' },
+          headers: { Accept: "application/vnd.github+json" },
           signal: controller.signal,
         }).catch(() => null);
         clearTimeout(timeout);
@@ -90,13 +94,15 @@ export function useAppUpdate() {
         if (data.draft || data.prerelease) return;
         if (!data.tag_name) return;
 
-        const latest = data.tag_name.replace(/^v/i, '');
+        const latest = data.tag_name.replace(/^v/i, "");
         if (!isNewer(latest, currentVersion)) return;
 
         const dismissed = await AsyncStorage.getItem(DISMISS_KEY);
         if (dismissed === latest) return;
 
-        const apk = data.assets.find((a) => a.name.toLowerCase().endsWith('.apk'));
+        const apk = data.assets.find((a) =>
+          a.name.toLowerCase().endsWith(".apk"),
+        );
 
         if (cancelled) return;
         setUpdate({

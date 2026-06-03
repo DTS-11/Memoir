@@ -1,9 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeProvider';
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../theme/ThemeProvider";
 
 export function EmptyState({
-  icon = 'images-outline',
+  icon = "images-outline",
   title,
   body,
   actionLabel,
@@ -19,14 +19,24 @@ export function EmptyState({
   return (
     <View style={styles.wrap}>
       <Ionicons name={icon} size={48} color={colors.textTertiary} />
-      <Text style={[typography.title3, { color: colors.text, marginTop: 16, textAlign: 'center' }]}>
+      <Text
+        style={[
+          typography.title3,
+          { color: colors.text, marginTop: 16, textAlign: "center" },
+        ]}
+      >
         {title}
       </Text>
       {!!body && (
         <Text
           style={[
             typography.body,
-            { color: colors.textSecondary, marginTop: 8, textAlign: 'center', paddingHorizontal: 24 },
+            {
+              color: colors.textSecondary,
+              marginTop: 8,
+              textAlign: "center",
+              paddingHorizontal: 24,
+            },
           ]}
         >
           {body}
@@ -47,8 +57,8 @@ export function EmptyState({
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 24,
   },
   action: {
@@ -56,12 +66,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     height: 44,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   actionLabel: {
-    color: '#FFF',
-    fontWeight: '700',
+    color: "#FFF",
+    fontWeight: "700",
     fontSize: 15,
   },
 });

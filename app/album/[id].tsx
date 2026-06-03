@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as MediaLibrary from 'expo-media-library/legacy';
-import { useTheme } from '../../src/theme/ThemeProvider';
-import { PhotoGrid } from '../../src/components/PhotoGrid';
-import { TopGlassBar } from '../../src/components/TopGlassBar';
-import { EmptyState } from '../../src/components/EmptyState';
-import type { Photo } from '../../src/hooks/usePhotos';
+import { useCallback, useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as MediaLibrary from "expo-media-library/legacy";
+import { useTheme } from "../../src/theme/ThemeProvider";
+import { PhotoGrid } from "../../src/components/PhotoGrid";
+import { TopGlassBar } from "../../src/components/TopGlassBar";
+import { EmptyState } from "../../src/components/EmptyState";
+import type { Photo } from "../../src/hooks/usePhotos";
 
 const PAGE_SIZE = 200;
 
@@ -29,7 +29,7 @@ export default function AlbumScreen() {
         album: id,
         first: PAGE_SIZE,
         after: endCursor,
-        mediaType: ['photo', 'video'],
+        mediaType: ["photo", "video"],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
       const mapped: Photo[] = res.assets.map((a) => ({
@@ -56,7 +56,7 @@ export default function AlbumScreen() {
   }, [id]);
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: '/photo/[id]', params: { id: p.id } });
+    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
   }, []);
 
   const headerHeight = insets.top + 64;
@@ -81,11 +81,15 @@ export default function AlbumScreen() {
 
       <View pointerEvents="box-none" style={styles.topBlock}>
         <TopGlassBar
-          title={title || 'Album'}
-          subtitle={`${photos.length}${hasMore ? '+' : ''} items`}
+          title={title || "Album"}
+          subtitle={`${photos.length}${hasMore ? "+" : ""} items`}
           right={
             <Pressable onPress={() => router.back()} hitSlop={10}>
-              <Ionicons name="chevron-back-circle" size={28} color={colors.accent} />
+              <Ionicons
+                name="chevron-back-circle"
+                size={28}
+                color={colors.accent}
+              />
             </Pressable>
           }
         />
@@ -96,5 +100,5 @@ export default function AlbumScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  topBlock: { position: 'absolute', top: 0, left: 0, right: 0 },
+  topBlock: { position: "absolute", top: 0, left: 0, right: 0 },
 });

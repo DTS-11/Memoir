@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from "react";
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-} from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import { useTheme } from '../theme/ThemeProvider';
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
+import { useTheme } from "../theme/ThemeProvider";
 
 type Props<T extends string> = {
   options: { value: T; label: string }[];
@@ -17,7 +23,11 @@ type Props<T extends string> = {
 const TRACK_PADDING = 2;
 const SPRING = { damping: 26, stiffness: 240, mass: 0.9 } as const;
 
-export function SegmentedControl<T extends string>({ options, value, onChange }: Props<T>) {
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: Props<T>) {
   const { colors, isDark } = useTheme();
   const index = options.findIndex((o) => o.value === value);
   const safeIndex = index < 0 ? 0 : index;
@@ -47,7 +57,9 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
       style={[
         styles.track,
         {
-          backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
+          backgroundColor: isDark
+            ? "rgba(118,118,128,0.24)"
+            : "rgba(118,118,128,0.12)",
         },
       ]}
     >
@@ -85,34 +97,30 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
 
 const styles = StyleSheet.create({
   track: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: 10,
     padding: TRACK_PADDING,
     height: 34,
-    position: 'relative',
-    alignSelf: 'center',
+    position: "relative",
+    alignSelf: "center",
   },
   indicator: {
-    position: 'absolute',
+    position: "absolute",
     top: TRACK_PADDING,
     bottom: TRACK_PADDING,
     left: TRACK_PADDING,
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
   },
   option: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 14,
     zIndex: 1,
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

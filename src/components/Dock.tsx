@@ -1,29 +1,37 @@
-import { useCallback, useEffect, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View, Platform } from 'react-native';
+import { useCallback, useEffect, useState } from "react";
+import { emitTabScrollToTop } from "../hooks/useTabScrollToTop";
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  Platform,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import type { BottomTabBarProps } from 'expo-router/tabs';
-import { GlassView } from './GlassView';
-import { useTheme } from '../theme/ThemeProvider';
-import { TabIcon, type TabIconName } from './TabIcon';
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import type { BottomTabBarProps } from "expo-router/tabs";
+import { GlassView } from "./GlassView";
+import { useTheme } from "../theme/ThemeProvider";
+import { TabIcon, type TabIconName } from "./TabIcon";
 
 const iconMap: Record<string, TabIconName> = {
-  index: 'library',
-  'for-you': 'sparkles',
-  albums: 'albums',
-  search: 'search',
+  index: "library",
+  "for-you": "sparkles",
+  albums: "albums",
+  search: "search",
 };
 
 const labelMap: Record<string, string> = {
-  index: 'Library',
-  'for-you': 'For You',
-  albums: 'Albums',
-  search: 'Search',
+  index: "Library",
+  "for-you": "For You",
+  albums: "Albums",
+  search: "Search",
 };
 
 // iOS-like spring: snappy but not bouncy.
@@ -65,32 +73,42 @@ export function Dock(props: BottomTabBarProps) {
       style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}
     >
       <GlassView
-        intensity={Platform.OS === 'ios' ? 80 : 100}
+        intensity={Platform.OS === "ios" ? 80 : 100}
         bordered
+        interactive
         style={[styles.dock, { borderColor: colors.glassBorder }]}
       >
-        <View onLayout={onLayout} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <View
+          onLayout={onLayout}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <Animated.View
           style={[
             styles.indicator,
             {
               backgroundColor: isDark
-                ? 'rgba(255,255,255,0.10)'
-                : 'rgba(0,0,0,0.06)',
+                ? "rgba(255,255,255,0.10)"
+                : "rgba(0,0,0,0.06)",
             },
             indicatorStyle,
           ]}
         />
         {state.routes.map((route, i) => {
           const isFocused = state.index === i;
-          const name = (route.name as string).replace(/^\(.*\)\//, '');
+          const name = (route.name as string).replace(/^\(.*\)\//, "");
           const onPress = () => {
+            if (isFocused) {
+              Haptics.selectionAsync();
+              emitTabScrollToTop(name);
+              return;
+            }
             const event = navigation.emit({
-              type: 'tabPress',
+              type: "tabPress",
               target: route.key,
               canPreventDefault: true,
             });
-            if (!isFocused && !event.defaultPrevented) {
+            if (!event.defaultPrevented) {
               Haptics.selectionAsync();
               navigation.navigate(route.name, route.params);
             }
@@ -102,7 +120,7 @@ export function Dock(props: BottomTabBarProps) {
             options.title ||
             labelMap[name] ||
             name;
-          const iconName = iconMap[name] ?? 'library';
+          const iconName = iconMap[name] ?? "library";
 
           return (
             <Pressable
@@ -137,29 +155,25 @@ export function Dock(props: BottomTabBarProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 14,
   },
   dock: {
-    flexDirection: 'row',
-    width: '100%',
+    flexDirection: "row",
+    width: "100%",
     maxWidth: 520,
     height: 64,
     borderRadius: 28,
-    overflow: 'hidden',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 18,
+    overflow: "hidden",
+    position: "relative",
+    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.22)",
   },
   indicator: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     bottom: 6,
     left: INDICATOR_INSET,
@@ -167,13 +181,13 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: 2,
     zIndex: 1,
   },
   label: {
     fontSize: 10.5,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

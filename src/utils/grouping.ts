@@ -1,4 +1,4 @@
-import type { Photo } from '../hooks/usePhotos';
+import type { Photo } from "../hooks/usePhotos";
 
 /**
  * Zoom is expressed as the number of columns in the grid, 1..8.
@@ -17,45 +17,61 @@ export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 8;
 export const DEFAULT_ZOOM = 4;
 
-export type LayoutFamily = 'years' | 'months' | 'days' | 'all';
+export type LayoutFamily = "years" | "months" | "days" | "all";
 
 export function familyForZoom(z: ZoomLevel): LayoutFamily {
-  if (z <= 1) return 'years';
-  if (z <= 2) return 'months';
-  if (z <= 5) return 'days';
-  return 'all';
+  if (z <= 1) return "years";
+  if (z <= 2) return "months";
+  if (z <= 5) return "days";
+  return "all";
 }
 
 export function zoomForFamily(f: LayoutFamily): ZoomLevel {
-  if (f === 'years') return 1;
-  if (f === 'months') return 2;
-  if (f === 'days') return 4;
+  if (f === "years") return 1;
+  if (f === "months") return 2;
+  if (f === "days") return 4;
   return 7;
 }
 
 export type GridItem =
-  | { type: 'header'; id: string; title: string; subtitle?: string }
-  | { type: 'photo'; id: string; photo: Photo };
+  | { type: "header"; id: string; title: string; subtitle?: string }
+  | { type: "photo"; id: string; photo: Photo };
 
 const monthNamesLong = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
+const dayFormatter = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
+
 function formatDay(d: Date) {
-  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  return dayFormatter.format(d);
 }
 
 export function buildGrid(photos: Photo[], zoom: ZoomLevel): GridItem[] {
   if (photos.length === 0) return [];
   const family = familyForZoom(zoom);
 
-  if (family === 'all') {
-    return photos.map((p) => ({ type: 'photo', id: p.id, photo: p }));
+  if (family === "all") {
+    return photos.map((p) => ({ type: "photo", id: p.id, photo: p }));
   }
 
   const items: GridItem[] = [];
-  let currentKey = '';
+  let currentKey = "";
 
   for (const photo of photos) {
     const d = new Date(photo.creationTime);
@@ -63,24 +79,24 @@ export function buildGrid(photos: Photo[], zoom: ZoomLevel): GridItem[] {
     let title: string;
     let subtitle: string | undefined;
 
-    if (family === 'years') {
+    if (family === "years") {
       key = String(d.getFullYear());
       title = key;
-    } else if (family === 'months') {
+    } else if (family === "months") {
       key = `${d.getFullYear()}-${d.getMonth()}`;
       title = monthNamesLong[d.getMonth()];
       subtitle = String(d.getFullYear());
     } else {
       // days
-      key = d.toDateString();
+      key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       title = formatDay(d);
     }
 
     if (key !== currentKey) {
       currentKey = key;
-      items.push({ type: 'header', id: `h:${key}`, title, subtitle });
+      items.push({ type: "header", id: `h:${key}`, title, subtitle });
     }
-    items.push({ type: 'photo', id: photo.id, photo });
+    items.push({ type: "photo", id: photo.id, photo });
   }
   return items;
 }
