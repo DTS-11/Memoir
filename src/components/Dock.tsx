@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View, Platform } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -26,21 +26,37 @@ const labelMap: Record<string, string> = {
   search: 'Search',
 };
 
+// iOS-like spring: snappy but not bouncy.
+const TAB_SPRING = { damping: 26, stiffness: 240, mass: 0.9 } as const;
+
+const INDICATOR_INSET = 6;
+
 export function Dock(props: BottomTabBarProps) {
   const { state, navigation, descriptors } = props;
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
+  const [dockWidth, setDockWidth] = useState(0);
   const focused = useSharedValue(state.index);
 
   useEffect(() => {
-    focused.value = withSpring(state.index, { damping: 18, stiffness: 220 });
+    focused.value = withSpring(state.index, TAB_SPRING);
   }, [state.index, focused]);
 
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setDockWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  // Each tab gets an equal slice of the dock's measured width. The indicator
+  // is one slice wide (minus a small inset on each side) and translates by
+  // exactly that slice width per tab — so it always lands perfectly under
+  // whichever tab is focused.
+  const tabSlice = dockWidth > 0 ? dockWidth / state.routes.length : 0;
+  const indicatorWidth = Math.max(0, tabSlice - INDICATOR_INSET * 2);
+
   const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: (focused.value * 100) / state.routes.length + '%' as any },
-    ],
+    transform: [{ translateX: focused.value * tabSlice }],
+    width: indicatorWidth,
   }));
 
   return (
@@ -53,11 +69,11 @@ export function Dock(props: BottomTabBarProps) {
         bordered
         style={[styles.dock, { borderColor: colors.glassBorder }]}
       >
+        <View onLayout={onLayout} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View
           style={[
             styles.indicator,
             {
-              width: `${100 / state.routes.length}%`,
               backgroundColor: isDark
                 ? 'rgba(255,255,255,0.10)'
                 : 'rgba(0,0,0,0.06)',
@@ -137,16 +153,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 16,
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 18,
   },
   indicator: {
     position: 'absolute',
     top: 6,
     bottom: 6,
-    left: 6,
+    left: INDICATOR_INSET,
     borderRadius: 22,
   },
   tab: {

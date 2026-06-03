@@ -1,6 +1,37 @@
 import type { Photo } from '../hooks/usePhotos';
 
-export type ZoomLevel = 'years' | 'months' | 'days' | 'all';
+/**
+ * Zoom is expressed as the number of columns in the grid, 1..8.
+ *
+ *   1     →  year-grouped, one giant tile per row
+ *   2     →  month-grouped
+ *   3,4,5 →  day-grouped (the "Days" feel)
+ *   6,7,8 →  ungrouped, dense grid (the "All Photos" feel)
+ *
+ * Pinching changes the column count by ±1 — so the user gets several discrete
+ * tile sizes inside each layout family before the layout itself shifts.
+ */
+export type ZoomLevel = number;
+
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 8;
+export const DEFAULT_ZOOM = 4;
+
+export type LayoutFamily = 'years' | 'months' | 'days' | 'all';
+
+export function familyForZoom(z: ZoomLevel): LayoutFamily {
+  if (z <= 1) return 'years';
+  if (z <= 2) return 'months';
+  if (z <= 5) return 'days';
+  return 'all';
+}
+
+export function zoomForFamily(f: LayoutFamily): ZoomLevel {
+  if (f === 'years') return 1;
+  if (f === 'months') return 2;
+  if (f === 'days') return 4;
+  return 7;
+}
 
 export type GridItem =
   | { type: 'header'; id: string; title: string; subtitle?: string }
@@ -17,7 +48,9 @@ function formatDay(d: Date) {
 
 export function buildGrid(photos: Photo[], zoom: ZoomLevel): GridItem[] {
   if (photos.length === 0) return [];
-  if (zoom === 'all') {
+  const family = familyForZoom(zoom);
+
+  if (family === 'all') {
     return photos.map((p) => ({ type: 'photo', id: p.id, photo: p }));
   }
 
@@ -30,14 +63,15 @@ export function buildGrid(photos: Photo[], zoom: ZoomLevel): GridItem[] {
     let title: string;
     let subtitle: string | undefined;
 
-    if (zoom === 'years') {
+    if (family === 'years') {
       key = String(d.getFullYear());
       title = key;
-    } else if (zoom === 'months') {
+    } else if (family === 'months') {
       key = `${d.getFullYear()}-${d.getMonth()}`;
       title = monthNamesLong[d.getMonth()];
       subtitle = String(d.getFullYear());
     } else {
+      // days
       key = d.toDateString();
       title = formatDay(d);
     }
@@ -51,23 +85,20 @@ export function buildGrid(photos: Photo[], zoom: ZoomLevel): GridItem[] {
   return items;
 }
 
-export function nextZoom(z: ZoomLevel): ZoomLevel {
-  if (z === 'years') return 'months';
-  if (z === 'months') return 'days';
-  if (z === 'days') return 'all';
-  return 'all';
+/** Pinch in (scale > 1) → fewer, larger tiles → decrease column count. */
+export function zoomIn(z: ZoomLevel): ZoomLevel {
+  return Math.max(MIN_ZOOM, z - 1);
 }
 
-export function prevZoom(z: ZoomLevel): ZoomLevel {
-  if (z === 'all') return 'days';
-  if (z === 'days') return 'months';
-  if (z === 'months') return 'years';
-  return 'years';
+/** Pinch out (scale < 1) → more, smaller tiles → increase column count. */
+export function zoomOut(z: ZoomLevel): ZoomLevel {
+  return Math.min(MAX_ZOOM, z + 1);
+}
+
+export function clampZoom(z: ZoomLevel): ZoomLevel {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(z)));
 }
 
 export function columnsForZoom(z: ZoomLevel): number {
-  if (z === 'years') return 1;
-  if (z === 'months') return 2;
-  if (z === 'days') return 3;
-  return 4;
+  return clampZoom(z);
 }

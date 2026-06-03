@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -14,21 +14,36 @@ type Props<T extends string> = {
   onChange: (v: T) => void;
 };
 
+const TRACK_PADDING = 2;
+const SPRING = { damping: 26, stiffness: 240, mass: 0.9 } as const;
+
 export function SegmentedControl<T extends string>({ options, value, onChange }: Props<T>) {
   const { colors, isDark } = useTheme();
   const index = options.findIndex((o) => o.value === value);
-  const pos = useSharedValue(index < 0 ? 0 : index);
+  const safeIndex = index < 0 ? 0 : index;
+
+  const [trackWidth, setTrackWidth] = useState(0);
+  const pos = useSharedValue(safeIndex);
 
   useEffect(() => {
-    pos.value = withSpring(index < 0 ? 0 : index, { damping: 22, stiffness: 240 });
-  }, [index, pos]);
+    pos.value = withSpring(safeIndex, SPRING);
+  }, [safeIndex, pos]);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setTrackWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  const innerWidth = Math.max(0, trackWidth - TRACK_PADDING * 2);
+  const slice = options.length > 0 ? innerWidth / options.length : 0;
 
   const indicator = useAnimatedStyle(() => ({
-    transform: [{ translateX: pos.value * (100 / options.length) + '%' as any }],
+    transform: [{ translateX: pos.value * slice }],
+    width: slice,
   }));
 
   return (
     <View
+      onLayout={onLayout}
       style={[
         styles.track,
         {
@@ -39,7 +54,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
       <Animated.View
         style={[
           styles.indicator,
-          { width: `${100 / options.length}%`, backgroundColor: colors.surfaceElevated },
+          { backgroundColor: colors.surfaceElevated },
           indicator,
         ]}
       />
@@ -71,18 +86,18 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
 const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    borderRadius: 9,
-    padding: 2,
-    height: 32,
+    borderRadius: 10,
+    padding: TRACK_PADDING,
+    height: 34,
     position: 'relative',
     alignSelf: 'center',
   },
   indicator: {
     position: 'absolute',
-    top: 2,
-    bottom: 2,
-    left: 2,
-    borderRadius: 7,
+    top: TRACK_PADDING,
+    bottom: TRACK_PADDING,
+    left: TRACK_PADDING,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 2,

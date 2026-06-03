@@ -7,7 +7,7 @@ export function TopGlassBar({
   title,
   subtitle,
   right,
-  intensity = 70,
+  intensity = 80,
 }: {
   title: string;
   subtitle?: string;
@@ -15,7 +15,7 @@ export function TopGlassBar({
   intensity?: number;
 }) {
   const insets = useSafeAreaInsets();
-  const { colors, typography } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <GlassView
@@ -30,9 +30,11 @@ export function TopGlassBar({
     >
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          <Text style={[typography.title1, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {title}
+          </Text>
           {!!subtitle && (
-            <Text style={[typography.subhead, { color: colors.textSecondary, marginTop: 2 }]}>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
               {subtitle}
             </Text>
           )}
@@ -45,13 +47,25 @@ export function TopGlassBar({
 
 const styles = StyleSheet.create({
   bar: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 12,
+  },
+  // iOS 18-style heavier, slightly tighter title.
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 2,
+    letterSpacing: -0.1,
   },
 });

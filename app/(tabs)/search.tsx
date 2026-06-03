@@ -8,22 +8,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { TopGlassBar } from '../../src/components/TopGlassBar';
 import { usePhotos, type Photo } from '../../src/hooks/usePhotos';
 import { EmptyState } from '../../src/components/EmptyState';
-
-type Category = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  filter: (p: Photo) => boolean;
-};
-
-const categories: Category[] = [
-  { key: 'recent', label: 'Recently Added', icon: 'time-outline', filter: () => true },
-  { key: 'video', label: 'Videos', icon: 'videocam-outline', filter: (p) => p.mediaType === 'video' },
-  { key: 'live', label: 'Live Photos', icon: 'radio-outline', filter: (p) => p.duration > 0 && p.duration < 4 && p.mediaType === 'photo' },
-  { key: 'screenshot', label: 'Screenshots', icon: 'phone-portrait-outline', filter: (p) => /screenshot/i.test(p.filename) },
-  { key: 'pano', label: 'Panoramas', icon: 'scan-outline', filter: (p) => p.width / Math.max(1, p.height) > 2 },
-  { key: 'selfie', label: 'Selfies', icon: 'person-circle-outline', filter: (p) => /selfie|front/i.test(p.filename) },
-];
+import { categories } from '../../src/utils/categories';
 
 export default function SearchScreen() {
   const { colors, typography, isDark } = useTheme();
@@ -105,17 +90,19 @@ export default function SearchScreen() {
             </Text>
             <View style={[styles.catList, { backgroundColor: colors.surfaceElevated }]}>
               {categories.map((c, i) => {
-                const count = photos.filter(c.filter).length;
+                const count = photos.filter(c.match).length;
                 if (count === 0) return null;
                 return (
                   <Pressable
                     key={c.key}
-                    style={[
+                    onPress={() => router.push({ pathname: '/category/[key]', params: { key: c.key } })}
+                    style={({ pressed }) => [
                       styles.catRow,
                       i < categories.length - 1 && {
                         borderBottomColor: colors.separator,
                         borderBottomWidth: StyleSheet.hairlineWidth,
                       },
+                      pressed && { backgroundColor: colors.surface },
                     ]}
                   >
                     <View style={[styles.catIcon, { backgroundColor: colors.accentMuted }]}>

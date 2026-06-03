@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { memo, useCallback } from 'react';
 import { Pressable, StyleSheet, View, Text } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Photo } from '../hooks/usePhotos';
@@ -16,14 +17,17 @@ function formatDuration(seconds: number) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function PhotoThumb({ photo, size, onPress, radius = 2 }: Props) {
+function PhotoThumbImpl({ photo, size, onPress, radius = 2 }: Props) {
   const { colors } = useTheme();
   const isVideo = photo.mediaType === 'video';
 
+  // Stable per-instance handler — only depends on photo identity + parent callback.
+  const handlePress = useCallback(() => onPress?.(photo), [onPress, photo]);
+
   return (
     <Pressable
-      onPress={() => onPress?.(photo)}
-      style={{ width: size, height: size, padding: 1 }}
+      onPress={handlePress}
+      style={[styles.pressable, { width: size, height: size }]}
     >
       <View
         style={[
@@ -35,9 +39,11 @@ export function PhotoThumb({ photo, size, onPress, radius = 2 }: Props) {
           source={{ uri: photo.uri }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          transition={120}
+          transition={80}
           recyclingKey={photo.id}
           cachePolicy="memory-disk"
+          priority="normal"
+          allowDownscaling
         />
         {isVideo && (
           <View style={styles.videoBadge}>
@@ -49,7 +55,22 @@ export function PhotoThumb({ photo, size, onPress, radius = 2 }: Props) {
   );
 }
 
+/**
+ * Re-render only when the photo identity or tile size changes. The parent grid
+ * re-renders frequently (scroll, zoom transitions) but the underlying photo
+ * data is immutable, so this trims an enormous amount of work.
+ */
+export const PhotoThumb = memo(PhotoThumbImpl, (prev, next) => {
+  return (
+    prev.photo.id === next.photo.id &&
+    prev.size === next.size &&
+    prev.radius === next.radius &&
+    prev.onPress === next.onPress
+  );
+});
+
 const styles = StyleSheet.create({
+  pressable: { padding: 1 },
   tile: {
     flex: 1,
     overflow: 'hidden',

@@ -3,7 +3,7 @@
     "name": "Memoir",
     "slug": "memoir",
     "scheme": "memoir",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./assets/AppIcons/appstore.png",
     "userInterfaceStyle": "automatic",

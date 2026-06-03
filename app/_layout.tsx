@@ -5,12 +5,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View } from 'react-native';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
+import { UpdateBanner } from '../src/components/UpdateBanner';
 
 function Root() {
   const { colors, isDark } = useTheme();
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <UpdateBanner />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -22,6 +24,14 @@ function Root() {
         <Stack.Screen
           name="photo/[id]"
           options={{ animation: 'fade', presentation: 'transparentModal' }}
+        />
+        <Stack.Screen
+          name="album/[id]"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="category/[key]"
+          options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
           name="permission"

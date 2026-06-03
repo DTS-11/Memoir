@@ -1,13 +1,14 @@
+import { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { TopGlassBar } from '../../src/components/TopGlassBar';
 import { EmptyState } from '../../src/components/EmptyState';
 import { useAlbums, type AlbumPreview } from '../../src/hooks/useAlbums';
 import { usePhotos } from '../../src/hooks/usePhotos';
-import { router } from 'expo-router';
 
 export default function AlbumsScreen() {
   const { colors, typography } = useTheme();
@@ -18,6 +19,15 @@ export default function AlbumsScreen() {
   const { width } = useWindowDimensions();
 
   const cardW = (width - 16 * 2 - 12) / 2;
+
+  const openAlbum = useCallback((a: AlbumPreview) => {
+    if (a.type === 'smart') {
+      // Smart albums map onto category drill-downs.
+      router.push({ pathname: '/category/[key]', params: { key: a.id.replace(/^smart:/i, '').toLowerCase() } });
+    } else {
+      router.push({ pathname: '/album/[id]', params: { id: a.id, title: a.title } });
+    }
+  }, []);
 
   if (!enabled) {
     return (
@@ -50,7 +60,7 @@ export default function AlbumsScreen() {
         </Text>
         <View style={styles.grid}>
           {albums.map((a) => (
-            <AlbumCard key={a.id} album={a} width={cardW} />
+            <AlbumCard key={a.id} album={a} width={cardW} onPress={openAlbum} />
           ))}
           {albums.length === 0 && !loading && (
             <Text style={[typography.subhead, { color: colors.textSecondary, marginVertical: 16 }]}>
@@ -64,7 +74,7 @@ export default function AlbumsScreen() {
         </Text>
         <View style={[styles.list, { backgroundColor: colors.surfaceElevated }]}>
           {smart.map((s, i) => (
-            <SmartRow key={s.id} album={s} divider={i < smart.length - 1} />
+            <SmartRow key={s.id} album={s} divider={i < smart.length - 1} onPress={openAlbum} />
           ))}
         </View>
       </ScrollView>
@@ -73,10 +83,18 @@ export default function AlbumsScreen() {
   );
 }
 
-function AlbumCard({ album, width }: { album: AlbumPreview; width: number }) {
+function AlbumCard({
+  album,
+  width,
+  onPress,
+}: {
+  album: AlbumPreview;
+  width: number;
+  onPress: (a: AlbumPreview) => void;
+}) {
   const { colors, typography } = useTheme();
   return (
-    <Pressable style={{ width, marginBottom: 18 }}>
+    <Pressable onPress={() => onPress(album)} style={({ pressed }) => [{ width, marginBottom: 18, opacity: pressed ? 0.85 : 1 }]}>
       <View
         style={[
           styles.cover,
@@ -101,10 +119,25 @@ function AlbumCard({ album, width }: { album: AlbumPreview; width: number }) {
   );
 }
 
-function SmartRow({ album, divider }: { album: AlbumPreview; divider: boolean }) {
+function SmartRow({
+  album,
+  divider,
+  onPress,
+}: {
+  album: AlbumPreview;
+  divider: boolean;
+  onPress: (a: AlbumPreview) => void;
+}) {
   const { colors, typography } = useTheme();
   return (
-    <Pressable style={[styles.row, divider && { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+    <Pressable
+      onPress={() => onPress(album)}
+      style={({ pressed }) => [
+        styles.row,
+        divider && { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+        pressed && { backgroundColor: colors.surface },
+      ]}
+    >
       <View style={[styles.rowThumb, { backgroundColor: colors.thumbPlaceholder }]}>
         {album.coverUri ? (
           <Image source={{ uri: album.coverUri }} style={StyleSheet.absoluteFill} contentFit="cover" />

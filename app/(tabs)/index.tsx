@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-worklets';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,9 +12,18 @@ import { PhotoGrid } from '../../src/components/PhotoGrid';
 import { SegmentedControl } from '../../src/components/SegmentedControl';
 import { TopGlassBar } from '../../src/components/TopGlassBar';
 import { EmptyState } from '../../src/components/EmptyState';
-import { nextZoom, prevZoom, type ZoomLevel } from '../../src/utils/grouping';
+import {
+  clampZoom,
+  DEFAULT_ZOOM,
+  familyForZoom,
+  zoomForFamily,
+  zoomIn as zoomInLevel,
+  zoomOut as zoomOutLevel,
+  type LayoutFamily,
+  type ZoomLevel,
+} from '../../src/utils/grouping';
 
-const zoomOptions: { value: ZoomLevel; label: string }[] = [
+const familyOptions: { value: LayoutFamily; label: string }[] = [
   { value: 'years', label: 'Years' },
   { value: 'months', label: 'Months' },
   { value: 'days', label: 'Days' },
@@ -22,29 +31,38 @@ const zoomOptions: { value: ZoomLevel; label: string }[] = [
 ];
 
 export default function Library() {
-  const { colors, typography } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { permission, photos, totalCount, requestPermission, loadMore } = usePhotos();
-  const [zoom, setZoom] = useState<ZoomLevel>('days');
+  const [zoom, setZoom] = useState<ZoomLevel>(DEFAULT_ZOOM);
 
-  const changeZoom = useCallback((z: ZoomLevel) => {
+  const setFamily = useCallback((f: LayoutFamily) => {
     setZoom((prev) => {
-      if (prev !== z) Haptics.selectionAsync();
-      return z;
+      const next = zoomForFamily(f);
+      if (familyForZoom(prev) !== f) Haptics.selectionAsync();
+      return next;
     });
   }, []);
 
-  const onZoomIn = useCallback(() => changeZoom(nextZoom(zoom)), [changeZoom, zoom]);
-  const onZoomOut = useCallback(() => changeZoom(prevZoom(zoom)), [changeZoom, zoom]);
+  const stepZoom = useCallback((dir: 'in' | 'out') => {
+    setZoom((prev) => {
+      const next = dir === 'in' ? zoomInLevel(prev) : zoomOutLevel(prev);
+      if (next !== prev) Haptics.selectionAsync();
+      return clampZoom(next);
+    });
+  }, []);
 
+  // Pinch IN (fingers spread, scale > 1) → fewer larger photos.
+  // Pinch OUT (scale < 1) → more smaller photos.
+  // We only react once per gesture (on end) so it feels discrete and snappy.
   const pinch = useMemo(
     () =>
       Gesture.Pinch()
         .onEnd((e) => {
-          if (e.scale > 1.25) runOnJS(onZoomIn)();
-          else if (e.scale < 0.8) runOnJS(onZoomOut)();
+          if (e.scale > 1.2) runOnJS(stepZoom)('in');
+          else if (e.scale < 0.85) runOnJS(stepZoom)('out');
         }),
-    [onZoomIn, onZoomOut]
+    [stepZoom]
   );
 
   const onPressPhoto = useCallback((p: Photo) => {
@@ -59,6 +77,7 @@ export default function Library() {
 
   const headerHeight = insets.top + 60 + 44 + 18;
   const dockClearance = insets.bottom + 90;
+  const family = familyForZoom(zoom);
 
   if (permission === 'denied' || permission === 'undetermined') {
     return (
@@ -114,7 +133,7 @@ export default function Library() {
           }
         />
         <View style={[styles.segmentWrap, { backgroundColor: colors.background }]}>
-          <SegmentedControl options={zoomOptions} value={zoom} onChange={changeZoom} />
+          <SegmentedControl options={familyOptions} value={family} onChange={setFamily} />
         </View>
       </View>
     </View>
