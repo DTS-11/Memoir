@@ -1,53 +1,160 @@
+<div align="center">
+
+<img src="assets/AppIcons/appstore.png" alt="Memoir app icon" width="128" height="128" />
+
 # Memoir
 
-A fast, mobile-first Apple Photos-style gallery built with Expo + React Native + Bun.
+**A fast, mobile-first photo gallery inspired by Apple Photos — built with Expo and React Native.**
 
-## Stack
-- Expo SDK 56, React Native 0.85, React 19, TypeScript
-- expo-router (file-based routing)
-- Reanimated 4 + react-native-gesture-handler (pinch zoom, swipe-to-dismiss, dock animation)
-- @shopify/flash-list (virtualised photo grid)
-- expo-image (fast image rendering with disk + memory cache)
-- expo-blur (glass theme)
-- expo-media-library (photo permissions + library access)
-- expo-haptics, @expo/vector-icons
+[![Expo SDK](https://img.shields.io/badge/Expo-SDK%2056-000020?logo=expo&logoColor=white)](https://docs.expo.dev/versions/v56.0.0/)
+[![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=white)](https://reactnative.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5%2B-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.2-FBF0DF?logo=bun&logoColor=black)](https://bun.sh/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Run
+</div>
 
-```bash
-bun install
-bun run ios       # iOS simulator (Mac required)
-bun run android   # Android emulator/device
-bun run start     # Pick a target from the Expo dev menu
-```
+---
 
-> First run on a physical device or simulator will prompt for photo-library
-> access. Memoir works in `limited` mode (iOS) as well as `granted`.
+## About
+
+Memoir reimagines the local photo gallery as a clean, gesture-driven mobile app. It reads photos directly from the device's library, groups them by Years / Months / Days, and presents them through a glass-blur dock and a full-screen viewer that feels native on both iOS and Android. There is no cloud, no account, and nothing leaves your device.
 
 ## Features
-- **Library tab** with Years / Months / Days / All Photos zoom levels (tap segmented control or pinch to change zoom).
-- **For You tab** with auto-generated monthly Memories and Featured Photos rail.
-- **Albums tab** with user albums + Recents/Videos smart groupings.
-- **Search tab** with text search across filenames/dates and category drilldown (Videos, Live Photos, Screenshots, Panoramas, Selfies).
-- **Photo viewer** with pinch-zoom, double-tap zoom, pan, swipe-to-dismiss, and glass top/bottom chrome.
-- **Dock navigation** — custom glass blur tab bar with animated indicator and haptics.
-- **Auto light/dark** following the OS appearance.
 
-## Project layout
+- **Library zoom levels** — pinch in and out of Years, Months, Days, and All Photos. The grid restructures with each level, just like Apple Photos.
+- **Glass dock navigation** — a custom blur-backed bottom dock with an animated focus indicator and haptic feedback on every switch.
+- **Full-screen viewer** — pinch zoom, double-tap zoom, two-finger pan, and swipe-to-dismiss with chrome that auto-hides on tap.
+- **For You** — auto-generated monthly Memories and a Featured Photos rail built from the most recent shots.
+- **Albums** — your user albums plus smart Recents and Videos groupings, all pulled live from the device.
+- **Search** — match on filename and date, or drill into categories like Videos, Live Photos, Screenshots, Panoramas, and Selfies.
+- **Light and dark themes** — automatically follows the system appearance with a hand-tuned token palette.
+- **Permission-aware** — graceful prompts and gating UI for granted, limited (iOS), denied, and undetermined states.
+- **Performance first** — `FlashList` for virtualised scroll, `expo-image` with memory + disk cache, and paginated library reads.
+- **Local only** — no servers, no telemetry, no uploads.
+
+## Tech Stack
+
+| Area | Choice |
+| --- | --- |
+| Runtime | Expo SDK 56, React Native 0.85, React 19, TypeScript |
+| Routing | `expo-router` (file-based, typed routes) |
+| Animation & gestures | `react-native-reanimated` 4, `react-native-gesture-handler`, `react-native-worklets` |
+| Lists & images | `@shopify/flash-list`, `expo-image` |
+| UI primitives | `expo-blur`, `expo-haptics`, `@expo/vector-icons` |
+| Media access | `expo-media-library` |
+| Package manager | [Bun](https://bun.sh) |
+
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh) `>= 1.2`
+- iOS Simulator (macOS) or an Android emulator / physical device
+- The [Expo Go](https://expo.dev/client) app if you want to skip a local native build
+
+### Install
+
+```bash
+git clone https://github.com/DTS-11/Memoir.git
+cd Memoir
+bun install
 ```
-app/
-  _layout.tsx             # Root: theme, gesture root, status bar, stack
-  permission.tsx          # Permission prompt (modal)
-  photo/[id].tsx          # Full-screen photo viewer
+
+### Run
+
+```bash
+bun run ios       # iOS Simulator (macOS only)
+bun run android   # Android emulator or connected device
+bun run start     # Choose a target from the Expo dev menu
+```
+
+On first launch, Memoir will ask for photo-library access. It works equally well in iOS' `limited` mode if you only want to share a subset.
+
+## Project Layout
+
+```
+app/                          # expo-router screens
+  _layout.tsx                 # Root stack, theme + gesture providers
+  permission.tsx              # Photo-access prompt (modal)
+  photo/[id].tsx              # Full-screen photo viewer
   (tabs)/
-    _layout.tsx           # Glass dock tabs
-    index.tsx             # Library
-    for-you.tsx           # For You
-    albums.tsx            # Albums
-    search.tsx            # Search
+    _layout.tsx               # Glass dock tab bar
+    index.tsx                 # Library
+    for-you.tsx               # For You
+    albums.tsx                # Albums
+    search.tsx                # Search
+
 src/
-  theme/                  # Tokens + ThemeProvider
-  components/             # Dock, GlassView, PhotoGrid, PhotoThumb, etc.
-  hooks/                  # usePhotos, useAlbums
-  utils/                  # grouping (year/month/day buckets)
+  theme/                      # Color tokens + ThemeProvider (light/dark)
+  components/                 # Dock, GlassView, PhotoGrid, SegmentedControl, ...
+  hooks/                      # usePhotos, useAlbums
+  utils/                      # grouping (year / month / day bucket builder)
+
+assets/
+  AppIcons/                   # Generated iOS, Android, and Play Store icons
 ```
+
+## Permissions
+
+- **iOS** — `NSPhotoLibraryUsageDescription` is set in `app.json`. Memoir supports the system "Selected Photos" mode.
+- **Android** — declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, and the legacy `READ_EXTERNAL_STORAGE`. Adaptive icons are wired through the `expo.android` config.
+
+---
+
+## Contributing
+
+Contributions, bug reports, and design feedback are all welcome. Memoir is intentionally small, so it is a friendly place for first-time contributors to land a real-world React Native change.
+
+### Ground rules
+
+1. **Be kind.** This project follows the spirit of the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). Disrespectful behavior will not be tolerated.
+2. **Keep it local-first.** Memoir never uploads photos or telemetry. Pull requests that introduce remote calls, analytics, or third-party trackers will be declined.
+3. **Stay aligned with the design language.** Glass, restraint, and platform-native gestures over heavy chrome.
+
+### Reporting issues
+
+Please open a [GitHub issue](https://github.com/DTS-11/Memoir/issues/new) and include:
+
+- A clear description of the bug or proposal
+- Steps to reproduce (if it is a bug)
+- Device, OS version, and Expo SDK output from `bunx expo-doctor` when relevant
+- Screenshots or short screen recordings when the issue is visual
+
+### Submitting a pull request
+
+1. **Fork** the repository and create a branch off `main`:
+   ```bash
+   git checkout -b feat/short-descriptive-name
+   ```
+2. **Install dependencies** with `bun install`.
+3. **Make your change.** Keep PRs focused — one feature or fix per branch.
+4. **Verify** the project still typechecks and the bundler still builds:
+   ```bash
+   bunx tsc --noEmit
+   bunx expo export --platform web --output-dir .web-test --no-bytecode
+   rm -rf .web-test
+   ```
+5. **Test on a real platform** (iOS Simulator, Android emulator, or a physical device). UI changes should be accompanied by a screenshot or short clip in the PR description.
+6. **Commit** with a clear, imperative message — for example, `Add long-press multi-select to grid`. Squash trivial fixups before opening the PR.
+7. **Open the pull request** against `main` and fill out the description. Link any issues it closes with `Closes #123`.
+
+### Coding conventions
+
+- TypeScript strict mode — no `any` unless explicitly justified.
+- Components live under `src/components/`; screens live under `app/`.
+- Theme values come from `src/theme/tokens.ts` — do not hardcode colors or spacing.
+- Animations belong in `react-native-reanimated`. Worklets imported from `react-native-worklets` (Reanimated 4 split).
+- Prefer composition over new top-level dependencies. If a new dependency is needed, mention it and the size impact in the PR description.
+
+### Areas that need help
+
+- More smart albums (Live Photos detection across platforms, People, Places)
+- Long-press multi-select with batch share / delete
+- Real shared-element transition between grid and viewer
+- Accessibility pass (screen-reader labels, larger text support, reduce-motion)
+- iPad / large-screen layouts
+
+## License
+
+Released under the [MIT License](LICENSE) — Copyright © 2026 Deon.
