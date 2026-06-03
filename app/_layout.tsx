@@ -1,0 +1,45 @@
+import 'react-native-gesture-handler';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View } from 'react-native';
+import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
+
+function Root() {
+  const { colors, isDark } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+          animation: 'fade',
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="photo/[id]"
+          options={{ animation: 'fade', presentation: 'transparentModal' }}
+        />
+        <Stack.Screen
+          name="permission"
+          options={{ presentation: 'transparentModal', animation: 'fade' }}
+        />
+      </Stack>
+    </View>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <Root />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
