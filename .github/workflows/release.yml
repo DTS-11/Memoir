@@ -86,14 +86,41 @@ jobs:
       - name: Run Expo prebuild (Android)
         run: bunx expo prebuild --platform android --clean --no-install
 
-      - name: Decode release keystore
+      - name: Decode release keystore and detect alias
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          EXPECTED_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
-          # Sanity check: keytool exits 0 if the file is a valid keystore.
-          keytool -list -keystore android/app/release.keystore \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >/dev/null
+
+          # Auto-detect the actual alias inside the keystore. PowerShell-generated
+          # PKCS12 files don't always store the alias as the FriendlyName the user
+          # typed (the underlying X509Certificate2.Export uses a different field),
+          # so we never trust the ANDROID_KEY_ALIAS secret literally — we resolve
+          # whatever Java's PKCS12 reader actually sees as the alias.
+          KEYTOOL_OUT=$(keytool -list \
+            -keystore android/app/release.keystore \
+            -storepass "$KEYSTORE_PASSWORD" 2>&1)
+
+          echo "$KEYTOOL_OUT"
+
+          DETECTED_ALIAS=$(echo "$KEYTOOL_OUT" \
+            | grep -E ', PrivateKeyEntry|, KeyEntry' \
+            | head -1 \
+            | sed 's/,.*//')
+
+          if [ -z "$DETECTED_ALIAS" ]; then
+            echo "::error::Could not detect any key entry in the keystore."
+            exit 1
+          fi
+
+          echo "Detected key alias: '$DETECTED_ALIAS'"
+          if [ -n "$EXPECTED_ALIAS" ] && [ "$DETECTED_ALIAS" != "$EXPECTED_ALIAS" ]; then
+            echo "::notice::ANDROID_KEY_ALIAS secret ('$EXPECTED_ALIAS') differs from actual keystore alias ('$DETECTED_ALIAS'). Using the actual alias for signing."
+          fi
+
+          echo "DETECTED_KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
 
       - name: Patch build.gradle with release signing config
         run: node scripts/patch-android-signing.mjs
@@ -105,7 +132,7 @@ jobs:
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_ALIAS: ${{ env.DETECTED_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
