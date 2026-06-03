@@ -121,13 +121,21 @@ The workflow at `.github/workflows/release.yml` runs on every `v*` tag push (or 
 
 You only need to do this once. **The same keystore must be reused for every future release** so that users can upgrade in place without uninstalling.
 
-A helper script generates a PKCS12 keystore using only `openssl` (no JDK required) and uploads the four GitHub Secrets the workflow expects. Run it from Git Bash:
+A helper script generates a PKCS12 keystore and uploads the four GitHub Secrets the workflow expects. Pick the version that matches your shell:
+
+**Windows (PowerShell)** — uses built-in `New-SelfSignedCertificate`, no JDK or openssl install required:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-release-keystore.ps1
+```
+
+**macOS / Linux / Git Bash** — uses `openssl`:
 
 ```bash
 bash scripts/setup-release-keystore.sh
 ```
 
-It will:
+Either script will:
 
 1. Prompt for a keystore password.
 2. Generate `memoir-release.p12` in the repo root (gitignored).
