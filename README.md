@@ -100,44 +100,54 @@ assets/
 - **iOS** — `NSPhotoLibraryUsageDescription` is set in `app.json`. Memoir supports the system "Selected Photos" mode.
 - **Android** — declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, and the legacy `READ_EXTERNAL_STORAGE`. Adaptive icons are wired through the `expo.android` config.
 
+## Installing Memoir on Android
+
+Releases live at [github.com/DTS-11/Memoir/releases](https://github.com/DTS-11/Memoir/releases). Each release attaches a signed `memoir-<version>.apk` you can install directly.
+
+Step by step on the device:
+
+1. Download `memoir-<version>.apk` from the latest release.
+2. Open the file. The first sideload triggers **"For your security, your phone can't install apps from this source"** — tap **Settings**, enable **Allow from this source** for the app that downloaded the APK (Chrome, Firefox, Files), then back out and tap the APK again.
+3. **Google Play Protect** will show **"App not recognised"** — this is expected for any app installed outside the Play Store. Tap **Install anyway** (sometimes hidden behind **More details**).
+4. Launch Memoir and grant photo access when prompted. Both **"Allow all photos"** and **"Allow selected photos"** modes are supported.
+
+Memoir requires Android 7.0 (API 24) or newer. Every future release uses the same signing key, so updates install in place without uninstalling first.
+
 ## Releasing an Android build
 
-Memoir ships to users today via signed APKs attached to [GitHub Releases](https://github.com/DTS-11/Memoir/releases). The workflow at `.github/workflows/release.yml` runs on every `v*` tag push (or manually via the Actions tab) and produces a single `memoir-<version>.apk`.
+The workflow at `.github/workflows/release.yml` runs on every `v*` tag push (or manually via the Actions tab) and publishes a single signed `memoir-<version>.apk` to GitHub Releases. APKs are signed with V1 + V2 + V3 signature schemes via Android Gradle Plugin's defaults.
 
 ### One-time keystore setup
 
-You only need to do this once. The same keystore must be reused for every future release so that users can upgrade in place without uninstalling.
+You only need to do this once. **The same keystore must be reused for every future release** so that users can upgrade in place without uninstalling.
 
-1. **Generate a release keystore** locally (PowerShell on Windows; `keytool` ships with the JDK):
-   ```powershell
-   keytool -genkeypair -v `
-     -keystore memoir-release.keystore `
-     -alias memoir `
-     -keyalg RSA -keysize 2048 -validity 10000 -storetype JKS
-   ```
-   You will be asked for a **store password**, a **key password**, and identity details. Remember the passwords — there is no recovery.
+A helper script generates a PKCS12 keystore using only `openssl` (no JDK required) and uploads the four GitHub Secrets the workflow expects. Run it from Git Bash:
 
-2. **Back the keystore up** somewhere safe (a password manager works). Losing it means you can never publish an update to anyone who already installed Memoir.
+```bash
+bash scripts/setup-release-keystore.sh
+```
 
-3. **Base64-encode the keystore** so it can live as a GitHub Secret:
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("memoir-release.keystore")) `
-     | Set-Clipboard
-   ```
+It will:
 
-4. **Add four GitHub repository secrets** under *Settings → Secrets and variables → Actions*:
+1. Prompt for a keystore password.
+2. Generate `memoir-release.p12` in the repo root (gitignored).
+3. Either upload all four secrets via `gh secret set` (if [GitHub CLI](https://cli.github.com/) is authenticated), or write `github-secrets-to-upload.txt` with paste-ready values for the GitHub web UI.
 
-   | Secret name | Value |
-   | --- | --- |
-   | `ANDROID_KEYSTORE_BASE64` | The clipboard contents from step 3 |
-   | `ANDROID_KEYSTORE_PASSWORD` | The store password from step 1 |
-   | `ANDROID_KEY_ALIAS` | `memoir` (or whatever `-alias` you chose) |
-   | `ANDROID_KEY_PASSWORD` | The key password from step 1 |
+The four secrets that need to exist on the repo:
+
+| Secret name | Description |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded contents of `memoir-release.p12`. |
+| `ANDROID_KEYSTORE_PASSWORD` | The password you chose when generating the keystore. |
+| `ANDROID_KEY_ALIAS` | `memoir` (the script sets this for you). |
+| `ANDROID_KEY_PASSWORD` | Same value as `ANDROID_KEYSTORE_PASSWORD` for PKCS12 stores. |
+
+> **Back up `memoir-release.p12` and the password** to a password manager immediately. If you lose either, you can never publish an update that installs on top of an existing copy of Memoir — users would have to uninstall first.
 
 ### Cutting a release
 
 ```bash
-# Bump the version in app.json (expo.version) and package.json, then commit.
+# Bump expo.version in app.json + the version in package.json, then commit.
 git tag v0.1.0
 git push origin v0.1.0
 ```
@@ -145,13 +155,13 @@ git push origin v0.1.0
 GitHub Actions will:
 
 1. Install JS dependencies with Bun.
-2. Run `expo prebuild --platform android` to materialise the native Android project.
-3. Decode the release keystore from secrets into `android/app/release.keystore`.
-4. Patch `android/app/build.gradle` to wire the release signing config (see `scripts/patch-android-signing.mjs`).
+2. Run `expo prebuild --platform android` to materialise the native Android project (the launcher icon and splash come straight from `assets/AppIcons/`).
+3. Decode the keystore from `ANDROID_KEYSTORE_BASE64` into `android/app/release.keystore`.
+4. Patch `android/app/build.gradle` to add a `release` signing config (see `scripts/patch-android-signing.mjs`).
 5. Build a signed release APK with `./gradlew assembleRelease`.
-6. Attach `memoir-<version>.apk` to a new GitHub Release with install instructions in the body.
+6. Attach `memoir-<version>.apk` to a new GitHub Release with the install instructions above prefilled in the body.
 
-If anything is misconfigured, the workflow will fail loudly at the "Validate required secrets" step before doing any work.
+If any secret is missing, the workflow fails at the **Validate required secrets** step before doing any work.
 
 ---
 

@@ -134,12 +134,22 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            ## Install on Android
+            ## Install Memoir on Android
 
-            1. Download `memoir-${{ steps.tag.outputs.version }}.apk` from the assets below.
-            2. On your phone, open the file. You may need to enable **Settings → Apps → Install unknown apps** for your browser the first time.
-            3. Launch **Memoir** and grant photo-library access when prompted.
+            1. **Download** `memoir-${{ steps.tag.outputs.version }}.apk` from the Assets section below.
+            2. **Open** the downloaded APK on your phone.
+            3. The first time you sideload an app, Android will block the install. Tap **Settings** when it appears and toggle **"Allow from this source"** on for the app that downloaded the APK (Chrome, Firefox, Files, etc.), then back out and tap the APK again.
+            4. Google Play Protect will show **"App not recognised"** — this is normal for any app installed outside the Play Store. Tap **"Install anyway"** (or **"More details" → "Install anyway"** on newer versions of Android).
+            5. Launch **Memoir** and grant photo-library access when prompted. You can choose **"Allow all photos"** or **"Allow selected photos"** — Memoir works in both modes.
 
-            > Memoir is a local-only gallery. No photos or telemetry ever leave your device.
+            ### Why the security warnings?
+
+            Memoir is **signed with a stable release key** (V1 + V2 + V3 signing schemes), so once you install this version every future update will install in place without re-prompting. The "unknown source" and "Play Protect" warnings appear because the APK isn't being distributed through the Play Store — not because anything is wrong with the app.
+
+            ### Privacy
+
+            Memoir is a **local-only** gallery. No photos, accounts, telemetry, or analytics ever leave your device. The source code for this release is at the tag below.
+
+            **Requires Android 7.0 (API 24) or newer.**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
