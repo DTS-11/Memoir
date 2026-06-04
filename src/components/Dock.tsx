@@ -1,13 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { emitTabScrollToTop } from "../hooks/useTabScrollToTop";
-import {
-  LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  Platform,
-} from "react-native";
+import { Pressable, StyleSheet, View, Platform } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,49 +15,40 @@ import { TabIcon, type TabIconName } from "./TabIcon";
 
 const iconMap: Record<string, TabIconName> = {
   index: "library",
-  "for-you": "sparkles",
   albums: "albums",
-  search: "search",
 };
 
-const labelMap: Record<string, string> = {
-  index: "Library",
-  "for-you": "For You",
-  albums: "Albums",
-  search: "Search",
-};
-
-// iOS-like spring: snappy but not bouncy.
 const TAB_SPRING = { damping: 26, stiffness: 240, mass: 0.9 } as const;
 
+// Width of each icon slot inside the pill.
+const SLOT = 64;
 const INDICATOR_INSET = 6;
 
 export function Dock(props: BottomTabBarProps) {
-  const { state, navigation, descriptors } = props;
+  const { state, navigation } = props;
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
-  const [dockWidth, setDockWidth] = useState(0);
-  const focused = useSharedValue(state.index);
+  const visibleRoutes = state.routes.filter((r) => {
+    const name = (r.name as string).replace(/^\(.*\)\//, "");
+    return name in iconMap;
+  });
+  const focusedVisibleIdx = Math.max(
+    0,
+    visibleRoutes.findIndex((r) => r.key === state.routes[state.index]?.key),
+  );
+
+  const focused = useSharedValue(focusedVisibleIdx);
 
   useEffect(() => {
-    focused.value = withSpring(state.index, TAB_SPRING);
-  }, [state.index, focused]);
+    focused.value = withSpring(focusedVisibleIdx, TAB_SPRING);
+  }, [focusedVisibleIdx, focused]);
 
-  const onLayout = useCallback((e: LayoutChangeEvent) => {
-    setDockWidth(e.nativeEvent.layout.width);
-  }, []);
-
-  // Each tab gets an equal slice of the dock's measured width. The indicator
-  // is one slice wide (minus a small inset on each side) and translates by
-  // exactly that slice width per tab — so it always lands perfectly under
-  // whichever tab is focused.
-  const tabSlice = dockWidth > 0 ? dockWidth / state.routes.length : 0;
-  const indicatorWidth = Math.max(0, tabSlice - INDICATOR_INSET * 2);
+  const pillWidth = SLOT * visibleRoutes.length;
+  const indicatorWidth = SLOT - INDICATOR_INSET * 2;
 
   const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: focused.value * tabSlice }],
-    width: indicatorWidth,
+    transform: [{ translateX: focused.value * SLOT }],
   }));
 
   return (
@@ -76,27 +60,27 @@ export function Dock(props: BottomTabBarProps) {
         intensity={Platform.OS === "ios" ? 80 : 100}
         bordered
         interactive
-        style={[styles.dock, { borderColor: colors.glassBorder }]}
+        style={[
+          styles.dock,
+          { borderColor: colors.glassBorder, width: pillWidth },
+        ]}
       >
-        <View
-          onLayout={onLayout}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
         <Animated.View
           style={[
             styles.indicator,
             {
               backgroundColor: isDark
-                ? "rgba(255,255,255,0.10)"
-                : "rgba(0,0,0,0.06)",
+                ? "rgba(255,255,255,0.11)"
+                : "rgba(0,0,0,0.07)",
+              width: indicatorWidth,
             },
             indicatorStyle,
           ]}
         />
-        {state.routes.map((route, i) => {
-          const isFocused = state.index === i;
+        {visibleRoutes.map((route, i) => {
+          const isFocused = focusedVisibleIdx === i;
           const name = (route.name as string).replace(/^\(.*\)\//, "");
+
           const onPress = () => {
             if (isFocused) {
               Haptics.selectionAsync();
@@ -114,12 +98,6 @@ export function Dock(props: BottomTabBarProps) {
             }
           };
 
-          const { options } = descriptors[route.key];
-          const label =
-            (options.tabBarLabel as string) ||
-            options.title ||
-            labelMap[name] ||
-            name;
           const iconName = iconMap[name] ?? "library";
 
           return (
@@ -134,17 +112,8 @@ export function Dock(props: BottomTabBarProps) {
               <TabIcon
                 name={iconName}
                 color={isFocused ? colors.text : colors.textSecondary}
-                size={22}
+                size={23}
               />
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.label,
-                  { color: isFocused ? colors.text : colors.textSecondary },
-                ]}
-              >
-                {label}
-              </Text>
             </Pressable>
           );
         })}
@@ -160,34 +129,26 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: "center",
-    paddingHorizontal: 14,
   },
   dock: {
     flexDirection: "row",
-    width: "100%",
-    maxWidth: 520,
-    height: 64,
+    height: 56,
     borderRadius: 28,
     overflow: "hidden",
     position: "relative",
-    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.22)",
+    boxShadow: "0 8px 28px rgba(0, 0, 0, 0.22)",
   },
   indicator: {
     position: "absolute",
-    top: 6,
-    bottom: 6,
+    top: INDICATOR_INSET,
+    bottom: INDICATOR_INSET,
     left: INDICATOR_INSET,
     borderRadius: 22,
   },
   tab: {
-    flex: 1,
+    width: SLOT,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
     zIndex: 1,
-  },
-  label: {
-    fontSize: 10.5,
-    fontWeight: "600",
   },
 });

@@ -3,7 +3,6 @@ import {
   Alert,
   FlatList,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -11,6 +10,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import * as Sharing from "expo-sharing";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -27,6 +27,7 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { GlassView } from "../../src/components/GlassView";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
+import { semantic } from "../../src/theme/tokens";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useEvent } from "expo";
 
@@ -105,6 +106,8 @@ export default function PhotoViewer() {
   const current = data[currentIndex] ?? fallbackPhoto ?? directPhoto;
   const displayUri = details?.localUri || current?.uri;
   const isCurrentVideo = current?.mediaType === "video";
+  const isCurrentAudio = current?.mediaType === "audio";
+  const isCurrentPlayable = isCurrentVideo || isCurrentAudio;
 
   const [videoDuration, setVideoDuration] = useState(0);
   useEffect(() => {
@@ -177,7 +180,10 @@ export default function PhotoViewer() {
   }, [current, resetZoom]);
 
   useEffect(() => {
-    if (current?.mediaType === "video" && current.uri) {
+    if (
+      (current?.mediaType === "video" || current?.mediaType === "audio") &&
+      current.uri
+    ) {
       setVideoDuration(0);
       videoPlayer.replace(current.uri);
       videoPlayer.play();
@@ -330,10 +336,31 @@ export default function PhotoViewer() {
   const shareCurrent = useCallback(async () => {
     if (!current) return;
     Haptics.selectionAsync();
-    const uri = details?.localUri ?? displayUri;
-    if (!uri) return;
-    await Share.share({ url: uri });
-  }, [current, details, displayUri]);
+
+    // Prefer the already-loaded localUri; if not ready yet, fetch it now.
+    let fileUri = details?.localUri ?? null;
+    if (!fileUri) {
+      try {
+        const info = await MediaLibrary.getAssetInfoAsync(current.id);
+        fileUri = info?.localUri ?? null;
+      } catch {
+        // ignore — fall through to the guard below
+      }
+    }
+
+    if (!fileUri) {
+      Alert.alert(
+        "Unable to Share",
+        "Could not resolve a local file path for this item.",
+      );
+      return;
+    }
+
+    await Sharing.shareAsync(fileUri, {
+      mimeType: mimeTypeFor(current.filename, current.mediaType as string),
+      dialogTitle: current.filename,
+    });
+  }, [current, details]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!current) return;
@@ -417,6 +444,7 @@ export default function PhotoViewer() {
             renderItem={({ item, index }) => {
               const isCurrentItem = index === currentIndex;
               const isActiveVideo = isCurrentItem && item.mediaType === "video";
+              const isAudioItem = item.mediaType === "audio";
               return (
                 <View style={[styles.page, { width, height }]}>
                   <Animated.View style={isCurrentItem ? imgStyle : undefined}>
@@ -428,6 +456,17 @@ export default function PhotoViewer() {
                         nativeControls={false}
                         allowsPictureInPicture={false}
                       />
+                    ) : isAudioItem ? (
+                      <View style={[styles.audioPage, { width, height }]}>
+                        <Ionicons
+                          name="musical-notes"
+                          size={88}
+                          color="rgba(255,255,255,0.18)"
+                        />
+                        <Text style={styles.audioFilename} numberOfLines={2}>
+                          {item.filename}
+                        </Text>
+                      </View>
                     ) : (
                       <Image
                         source={{
@@ -520,11 +559,19 @@ export default function PhotoViewer() {
             />
             <InfoRow
               label="Type"
-              value={current.mediaType === "video" ? "Video" : "Photo"}
+              value={
+                current.mediaType === "video"
+                  ? "Video"
+                  : current.mediaType === "audio"
+                    ? "Audio"
+                    : current.mediaType === "photo"
+                      ? "Photo"
+                      : "Unknown"
+              }
             />
           </GlassView>
         )}
-        {isCurrentVideo && (
+        {isCurrentPlayable && (
           <GlassView intensity={72} style={styles.videoControls}>
             <Pressable
               onPress={toggleVideoPlayback}
@@ -596,7 +643,11 @@ function ActionBtn({
   active?: boolean;
   destructive?: boolean;
 }) {
-  const color = destructive ? "#FF453A" : active ? "#FF375F" : "#FFF";
+  const color = destructive
+    ? semantic.delete
+    : active
+      ? semantic.favorite
+      : "#FFF";
   return (
     <Pressable
       hitSlop={10}
@@ -634,6 +685,18 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     top: "46%",
     pointerEvents: "none",
+  },
+  audioPage: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+  },
+  audioFilename: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
+    paddingHorizontal: 40,
   },
   topChrome: {
     position: "absolute",
@@ -743,6 +806,46 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
+
+function mimeTypeFor(filename: string, mediaType: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (mediaType === "video") {
+    const map: Record<string, string> = {
+      mp4: "video/mp4",
+      mov: "video/quicktime",
+      m4v: "video/x-m4v",
+      avi: "video/x-msvideo",
+      mkv: "video/x-matroska",
+      webm: "video/webm",
+    };
+    return map[ext] ?? "video/mp4";
+  }
+  if (mediaType === "audio") {
+    const map: Record<string, string> = {
+      mp3: "audio/mpeg",
+      m4a: "audio/m4a",
+      aac: "audio/aac",
+      wav: "audio/wav",
+      flac: "audio/flac",
+      ogg: "audio/ogg",
+    };
+    return map[ext] ?? "audio/mpeg";
+  }
+  // photo / unknown
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    heic: "image/heic",
+    heif: "image/heif",
+    gif: "image/gif",
+    webp: "image/webp",
+    tiff: "image/tiff",
+    tif: "image/tiff",
+    bmp: "image/bmp",
+  };
+  return map[ext] ?? "image/jpeg";
+}
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);

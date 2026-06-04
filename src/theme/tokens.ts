@@ -19,37 +19,48 @@ export type ThemeColors = {
 
 export const lightColors: ThemeColors = {
   background: "#FFFFFF",
-  surface: "#F5F5F7",
+  surface: "#F5F5F5",
   surfaceElevated: "#FFFFFF",
-  glassTint: "rgba(245, 245, 247, 0.72)",
-  glassBorder: "rgba(0, 0, 0, 0.06)",
-  text: "#0A0A0B",
-  textSecondary: "rgba(10, 10, 11, 0.6)",
-  textTertiary: "rgba(10, 10, 11, 0.38)",
-  accent: "#0A84FF",
-  accentMuted: "rgba(10, 132, 255, 0.16)",
-  separator: "rgba(60, 60, 67, 0.18)",
-  thumbPlaceholder: "#E5E5EA",
-  shadow: "rgba(0, 0, 0, 0.18)",
-  scrim: "rgba(0, 0, 0, 0.45)",
+  glassTint: "rgba(255,255,255,0.82)",
+  glassBorder: "rgba(0,0,0,0.09)",
+  text: "#080808",
+  textSecondary: "rgba(8,8,8,0.54)",
+  textTertiary: "rgba(8,8,8,0.30)",
+  accent: "#080808",
+  accentMuted: "rgba(8,8,8,0.07)",
+  separator: "rgba(0,0,0,0.08)",
+  thumbPlaceholder: "#E8E8E8",
+  shadow: "rgba(0,0,0,0.12)",
+  scrim: "rgba(0,0,0,0.45)",
 };
 
 export const darkColors: ThemeColors = {
   background: "#000000",
-  surface: "#0E0E10",
-  surfaceElevated: "#1C1C1E",
-  glassTint: "rgba(28, 28, 30, 0.62)",
-  glassBorder: "rgba(255, 255, 255, 0.08)",
+  surface: "#0D0D0D",
+  surfaceElevated: "#181818",
+  glassTint: "rgba(0,0,0,0.74)",
+  glassBorder: "rgba(255,255,255,0.10)",
   text: "#FFFFFF",
-  textSecondary: "rgba(235, 235, 245, 0.6)",
-  textTertiary: "rgba(235, 235, 245, 0.3)",
-  accent: "#0A84FF",
-  accentMuted: "rgba(10, 132, 255, 0.24)",
-  separator: "rgba(84, 84, 88, 0.6)",
-  thumbPlaceholder: "#1C1C1E",
-  shadow: "rgba(0, 0, 0, 0.6)",
-  scrim: "rgba(0, 0, 0, 0.65)",
+  textSecondary: "rgba(255,255,255,0.54)",
+  textTertiary: "rgba(255,255,255,0.28)",
+  accent: "#FFFFFF",
+  accentMuted: "rgba(255,255,255,0.10)",
+  separator: "rgba(255,255,255,0.08)",
+  thumbPlaceholder: "#1C1C1C",
+  shadow: "rgba(0,0,0,0.72)",
+  scrim: "rgba(0,0,0,0.65)",
 };
+
+// Semantic accent colors — constant across both modes.
+// Red for destructive, orange for archive, pink for favorites.
+export const semantic = {
+  delete: "#FF3B30",
+  deleteMuted: "rgba(255,59,48,0.14)",
+  archive: "#FF9500",
+  archiveMuted: "rgba(255,149,0,0.14)",
+  favorite: "#FF2D55",
+  favoriteMuted: "rgba(255,45,85,0.14)",
+} as const;
 
 export const radii = {
   xs: 4,
@@ -63,10 +74,10 @@ export const radii = {
 export const spacing = (n: number) => n * 4;
 
 export const typography = {
-  largeTitle: { fontSize: 34, fontWeight: "700" as const, letterSpacing: 0.37 },
-  title1: { fontSize: 28, fontWeight: "700" as const },
-  title2: { fontSize: 22, fontWeight: "700" as const },
-  title3: { fontSize: 20, fontWeight: "600" as const },
+  largeTitle: { fontSize: 34, fontWeight: "700" as const, letterSpacing: -0.5 },
+  title1: { fontSize: 28, fontWeight: "700" as const, letterSpacing: -0.4 },
+  title2: { fontSize: 22, fontWeight: "700" as const, letterSpacing: -0.3 },
+  title3: { fontSize: 20, fontWeight: "600" as const, letterSpacing: -0.2 },
   headline: { fontSize: 17, fontWeight: "600" as const },
   body: { fontSize: 17, fontWeight: "400" as const },
   callout: { fontSize: 16, fontWeight: "400" as const },

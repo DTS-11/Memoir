@@ -54,6 +54,7 @@ function usePhotosController() {
   const [totalCount, setTotalCount] = useState(0);
   const endCursorRef = useRef<string | undefined>(undefined);
   const loadingRef = useRef(false);
+  const loadGenRef = useRef(0);
 
   // ── persistence helpers ─────────────────────────────────────────────────────
 
@@ -84,17 +85,21 @@ function usePhotosController() {
 
   const loadPage = useCallback(
     async (after: string | undefined, replace: boolean) => {
-      if (loadingRef.current) return;
+      // refresh (replace=true) always proceeds; loadMore waits for idle
+      if (!replace && loadingRef.current) return;
       if (permission !== "granted" && permission !== "limited") return;
+      const gen = ++loadGenRef.current;
       loadingRef.current = true;
       setLoading(true);
       try {
         const result = await MediaLibrary.getAssetsAsync({
-          mediaType: ["photo", "video"],
+          mediaType: ["photo", "video", "audio", "unknown"],
           first: PAGE_SIZE,
           after,
           sortBy: [[MediaLibrary.SortBy.creationTime, false]],
         });
+        // discard if a newer refresh has already superseded this load
+        if (gen !== loadGenRef.current) return;
         const mapped: Photo[] = result.assets.map((a) => ({
           id: a.id,
           uri: a.uri,
@@ -110,8 +115,10 @@ function usePhotosController() {
         endCursorRef.current = result.endCursor;
         setHasMore(result.hasNextPage);
       } finally {
-        loadingRef.current = false;
-        setLoading(false);
+        if (gen === loadGenRef.current) {
+          loadingRef.current = false;
+          setLoading(false);
+        }
       }
     },
     [permission],

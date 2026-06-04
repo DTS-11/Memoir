@@ -93,6 +93,7 @@ export default function ArchiveScreen() {
   const renderItem = useCallback(
     ({ item }: { item: Photo }) => {
       const isSelected = selected.has(item.id);
+      const isAudio = item.mediaType === "audio";
       return (
         <Pressable
           onPress={() => {
@@ -104,12 +105,22 @@ export default function ArchiveScreen() {
           }}
           style={[styles.tile, { width: tileSize, height: tileSize }]}
         >
-          <Image
-            source={{ uri: item.uri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            recyclingKey={item.id}
-          />
+          {isAudio ? (
+            <View style={styles.audioPlaceholder}>
+              <Ionicons
+                name="musical-notes"
+                size={tileSize * 0.3}
+                color="rgba(255,255,255,0.45)"
+              />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: item.uri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              recyclingKey={item.id}
+            />
+          )}
           {selecting && isSelected && <View style={styles.selectedOverlay} />}
           {selecting && (
             <View
@@ -119,7 +130,7 @@ export default function ArchiveScreen() {
               ]}
             >
               {isSelected && (
-                <Ionicons name="checkmark" size={13} color="#FFF" />
+                <Ionicons name="checkmark" size={13} color="#000" />
               )}
             </View>
           )}
@@ -307,13 +318,23 @@ const styles = StyleSheet.create({
   },
   headerCenter: { flex: 1, alignItems: "center" },
   tile: { overflow: "hidden" },
+  audioPlaceholder: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   selectedOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,122,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   checkCircle: {
     position: "absolute",
@@ -328,7 +349,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkCircleSelected: { backgroundColor: "#007AFF", borderColor: "#007AFF" },
+  checkCircleSelected: {
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderColor: "rgba(255,255,255,0.96)",
+  },
   toolbar: {
     position: "absolute",
     bottom: 0,

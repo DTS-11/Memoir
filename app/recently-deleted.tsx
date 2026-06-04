@@ -135,6 +135,7 @@ export default function RecentlyDeletedScreen() {
   const renderItem = useCallback(
     ({ item }: { item: RecentlyDeletedPhoto }) => {
       const isSelected = selected.has(item.id);
+      const isAudio = item.mediaType === "audio";
       return (
         <Pressable
           onPress={() => {
@@ -149,12 +150,22 @@ export default function RecentlyDeletedScreen() {
           }}
           style={[styles.tile, { width: tileSize, height: tileSize }]}
         >
-          <Image
-            source={{ uri: item.uri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            recyclingKey={item.id}
-          />
+          {isAudio ? (
+            <View style={styles.audioPlaceholder}>
+              <Ionicons
+                name="musical-notes"
+                size={tileSize * 0.3}
+                color="rgba(255,255,255,0.45)"
+              />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: item.uri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              recyclingKey={item.id}
+            />
+          )}
           <View style={styles.tileGradient} />
           <Text style={styles.tileAge}>{daysAgo(item.deletedAt)}</Text>
           {selecting && (
@@ -165,7 +176,7 @@ export default function RecentlyDeletedScreen() {
               ]}
             >
               {isSelected && (
-                <Ionicons name="checkmark" size={13} color="#FFF" />
+                <Ionicons name="checkmark" size={13} color="#000" />
               )}
             </View>
           )}
@@ -406,6 +417,16 @@ const styles = StyleSheet.create({
   tile: {
     overflow: "hidden",
   },
+  audioPlaceholder: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tileGradient: {
     position: "absolute",
     bottom: 0,
@@ -438,8 +459,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkCircleSelected: {
-    backgroundColor: "#007AFF",
-    borderColor: "#007AFF",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderColor: "rgba(255,255,255,0.96)",
   },
   selectedOverlay: {
     position: "absolute",
@@ -447,7 +468,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,122,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   toolbar: {
     position: "absolute",

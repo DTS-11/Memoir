@@ -47,7 +47,10 @@ export function EmptyState({
           onPress={onAction}
           style={[styles.action, { backgroundColor: colors.accent }]}
         >
-          <Text style={styles.actionLabel}>{actionLabel}</Text>
+          {/* accent is black in light / white in dark → background color inverts the text */}
+          <Text style={[styles.actionLabel, { color: colors.background }]}>
+            {actionLabel}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -70,7 +73,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionLabel: {
-    color: "#FFF",
     fontWeight: "700",
     fontSize: 15,
   },

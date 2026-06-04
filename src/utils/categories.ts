@@ -22,6 +22,12 @@ export const categories: Category[] = [
     match: (p) => p.mediaType === "video",
   },
   {
+    key: "audio",
+    label: "Audio",
+    icon: "musical-notes-outline",
+    match: (p) => p.mediaType === "audio",
+  },
+  {
     key: "live",
     label: "Live Photos",
     icon: "radio-outline",

@@ -34,12 +34,17 @@ function PhotoThumbImpl({
 }: Props) {
   const { colors } = useTheme();
   const isVideo = photo.mediaType === "video";
+  const isAudio = photo.mediaType === "audio";
+  // Photos and videos have visual thumbnails; audio/unknown get placeholder UI
+  const hasVisual = photo.mediaType === "photo" || photo.mediaType === "video";
 
   const handlePress = useCallback(() => onPress?.(photo), [onPress, photo]);
   const handleLongPress = useCallback(
     () => onLongPress?.(photo),
     [onLongPress, photo],
   );
+
+  const iconSize = Math.round(size * 0.34);
 
   return (
     <Pressable
@@ -54,44 +59,85 @@ function PhotoThumbImpl({
           { borderRadius: radius, backgroundColor: colors.thumbPlaceholder },
         ]}
       >
-        <Image
-          source={{ uri: photo.uri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={0}
-          recyclingKey={photo.id}
-          cachePolicy="memory-disk"
-          priority="low"
-          allowDownscaling
-        />
+        {hasVisual ? (
+          <Image
+            source={{ uri: photo.uri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={0}
+            recyclingKey={photo.id}
+            cachePolicy="memory-disk"
+            priority="low"
+            allowDownscaling
+          />
+        ) : isAudio ? (
+          <View style={[styles.mediaPlaceholder, styles.audioBg]}>
+            <Ionicons
+              name="musical-notes"
+              size={iconSize}
+              color="rgba(255,255,255,0.45)"
+            />
+          </View>
+        ) : (
+          // "unknown" type — try image, placeholder colour already shows beneath
+          <>
+            <Image
+              source={{ uri: photo.uri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={0}
+              recyclingKey={photo.id}
+              cachePolicy="memory-disk"
+              priority="low"
+            />
+            <View style={styles.unknownBadge} pointerEvents="none">
+              <Ionicons
+                name="document-outline"
+                size={iconSize * 0.6}
+                color="rgba(255,255,255,0.55)"
+              />
+            </View>
+          </>
+        )}
 
-        {/* Dim overlay when selected */}
+        {/* Selection dim */}
         {selected && <View style={styles.selectedDim} />}
 
-        {/* Selection ring — drawn as an overlay so it never affects image layout */}
+        {/* Selection ring */}
         {selected && (
           <View style={[styles.selectionRing, { borderRadius: radius }]} />
         )}
 
-        {isVideo && (
-          <View style={styles.videoBadge}>
-            <Text style={styles.videoText}>
+        {/* Duration badge — videos and audio */}
+        {(isVideo || isAudio) && (
+          <View style={styles.durationBadge}>
+            {isAudio && (
+              <Ionicons
+                name="musical-note"
+                size={9}
+                color="#FFF"
+                style={{ marginRight: 2 }}
+              />
+            )}
+            <Text style={styles.durationText}>
               {formatDuration(photo.duration)}
             </Text>
           </View>
         )}
 
+        {/* Favorite heart */}
         {isFavorite && !inSelectMode && (
           <View style={styles.favBadge}>
             <Ionicons name="heart" size={11} color="#FFF" />
           </View>
         )}
 
+        {/* Select-mode checkbox */}
         {inSelectMode && (
           <View
             style={[styles.checkCircle, selected && styles.checkCircleSelected]}
           >
-            {selected && <Ionicons name="checkmark" size={12} color="#FFF" />}
+            {selected && <Ionicons name="checkmark" size={12} color="#000" />}
           </View>
         )}
       </View>
@@ -114,35 +160,59 @@ export const PhotoThumb = memo(PhotoThumbImpl, (prev, next) => {
 
 const styles = StyleSheet.create({
   pressable: { padding: 1 },
-  tile: {
-    flex: 1,
-    overflow: "hidden",
+  tile: { flex: 1, overflow: "hidden" },
+
+  mediaPlaceholder: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  // Drawn on top of the image as an absoluteFill overlay — never modifies tile
-  // layout so it can't clip or hide the image beneath it.
+  audioBg: { backgroundColor: "#111" },
+  unknownBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 5,
+  },
+
   selectionRing: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 3,
-    borderColor: "#007AFF",
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 2.5,
+    borderColor: "rgba(255,255,255,0.95)",
   },
   selectedDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  videoBadge: {
+
+  durationBadge: {
     position: "absolute",
     bottom: 4,
     right: 6,
-    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.50)",
   },
-  videoText: {
+  durationText: {
     color: "#FFF",
     fontSize: 11,
     fontWeight: "600",
   },
+
   favBadge: {
     position: "absolute",
     bottom: 5,
@@ -150,10 +220,11 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.38)",
     alignItems: "center",
     justifyContent: "center",
   },
+
   checkCircle: {
     position: "absolute",
     top: 5,
@@ -162,13 +233,13 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.9)",
-    backgroundColor: "rgba(0,0,0,0.25)",
+    borderColor: "rgba(255,255,255,0.90)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     alignItems: "center",
     justifyContent: "center",
   },
   checkCircleSelected: {
-    backgroundColor: "#007AFF",
-    borderColor: "#007AFF",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderColor: "rgba(255,255,255,0.96)",
   },
 });

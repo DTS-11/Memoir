@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-worklets";
@@ -210,7 +210,11 @@ export default function Library() {
       ),
     );
     const uri = infos[0]?.localUri ?? selected[0]?.uri;
-    if (uri) await Share.share({ url: uri });
+    if (uri) {
+      await Sharing.shareAsync(uri, { dialogTitle: selected[0]?.filename });
+    } else {
+      Alert.alert("Unable to Share", "Could not resolve a local file path.");
+    }
     cancelSelectMode();
   }, [hasSelection, photos, selectedIds, cancelSelectMode]);
 
@@ -340,7 +344,11 @@ export default function Library() {
     transform: [{ scale: gridScale.value }],
   }));
 
-  if (permission === "denied" || permission === "undetermined") {
+  if (permission === "undetermined") {
+    return <View style={[styles.fill, { backgroundColor: colors.background }]} />;
+  }
+
+  if (permission === "denied") {
     return (
       <View style={[styles.fill, { backgroundColor: colors.background }]}>
         <TopGlassBar title="Library" />

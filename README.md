@@ -18,19 +18,22 @@
 
 ## About
 
-Memoir reimagines the local photo gallery as a clean, gesture-driven mobile app. It reads photos directly from the device's library, groups them by Years / Months / Days, and presents them through a glass-blur dock and a full-screen viewer that feels native on both iOS and Android. There is no cloud, no account, and nothing leaves your device.
+Memoir reimagines the local photo gallery as a clean, gesture-driven mobile app. It reads media directly from the device's library — photos, videos, audio, and more — groups them by Years / Months / Days, and presents them through a glass-blur dock and a full-screen viewer that feels native on both iOS and Android. There is no cloud, no account, and nothing leaves your device.
 
 ## Features
 
 - **Library zoom levels** — pinch in and out of Years, Months, Days, and All Photos. The grid restructures with each level, just like Apple Photos.
-- **Glass dock navigation** — a custom blur-backed bottom dock with an animated focus indicator and haptic feedback on every switch.
-- **Full-screen viewer** — pinch zoom, double-tap zoom, two-finger pan, and swipe-to-dismiss with chrome that auto-hides on tap.
-- **For You** — auto-generated monthly Memories and a Featured Photos rail built from the most recent shots.
-- **Albums** — your user albums plus smart Recents and Videos groupings, all pulled live from the device.
-- **Search** — match on filename and date, or drill into categories like Videos, Live Photos, Screenshots, Panoramas, and Selfies.
-- **Light and dark themes** — automatically follows the system appearance with a hand-tuned token palette.
-- **Permission-aware** — graceful prompts and gating UI for granted, limited (iOS), denied, and undetermined states.
-- **Performance first** — `FlashList` for virtualised scroll, `expo-image` with memory + disk cache, and paginated library reads.
+- **Glass pill dock** — a compact two-icon frosted-glass dock centered at the bottom, with an animated focus indicator and haptic feedback.
+- **Full-screen viewer** — pinch zoom, double-tap zoom, two-finger pan, swipe-to-dismiss, and a scrubber for video and audio playback.
+- **Browse screen** — monthly Memories carousel, user Albums in a 3-column grid, smart Media Types list, semantic Utilities (Favorites / Archive / Recently Deleted), and a Categories drill-down — all behind a floating search bar.
+- **Favorites** — heart any photo from the viewer or grid; view them in a dedicated screen.
+- **Archive** — hide photos from the main library; restore or permanently delete from the Archive screen.
+- **Recently Deleted** — a 30-day soft-delete buffer before anything is permanently removed.
+- **All file types** — photos, videos, audio, and unknown file types are all surfaced. Audio files play through the full-screen viewer with the same scrubber controls.
+- **Monochromatic theme** — black-and-white palette with semantic accents: red for delete, orange for archive, pink for favorites. Automatically follows system light/dark appearance.
+- **Sharing** — share any photo or video from the viewer or library grid using the native share sheet via `expo-sharing`.
+- **Permission-aware** — graceful prompts and gating UI for granted, limited (iOS), denied, and undetermined states. Undetermined shows a blank screen rather than a false error.
+- **Performance first** — `FlashList` for the library grid, `expo-image` with memory + disk cache, paginated library reads, and memoized sub-components throughout.
 - **Local only** — no servers, no telemetry, no uploads.
 
 ## Tech Stack
@@ -41,8 +44,10 @@ Memoir reimagines the local photo gallery as a clean, gesture-driven mobile app.
 | Routing | `expo-router` (file-based, typed routes) |
 | Animation & gestures | `react-native-reanimated` 4, `react-native-gesture-handler`, `react-native-worklets` |
 | Lists & images | `@shopify/flash-list`, `expo-image` |
-| UI primitives | `expo-blur`, `expo-haptics`, `@expo/vector-icons` |
-| Media access | `expo-media-library` |
+| Media access | `expo-media-library` (legacy API) |
+| Playback | `expo-video` (handles both video and audio) |
+| Sharing | `expo-sharing` |
+| UI primitives | `expo-glass-effect`, `expo-blur`, `expo-haptics`, `expo-linear-gradient`, `@expo/vector-icons` |
 | Package manager | [Bun](https://bun.sh) |
 
 ## Getting Started
@@ -77,19 +82,22 @@ On first launch, Memoir will ask for photo-library access. It works equally well
 app/                          # expo-router screens
   _layout.tsx                 # Root stack, theme + gesture providers
   permission.tsx              # Photo-access prompt (modal)
-  photo/[id].tsx              # Full-screen photo viewer
+  photo/[id].tsx              # Full-screen viewer (photo, video, audio)
+  favorites.tsx               # Favorites screen
+  archive.tsx                 # Archive screen
+  recently-deleted.tsx        # Recently Deleted screen
   (tabs)/
-    _layout.tsx               # Glass dock tab bar
+    _layout.tsx               # Glass pill dock (2 tabs)
     index.tsx                 # Library
-    for-you.tsx               # For You
-    albums.tsx                # Albums
-    search.tsx                # Search
+    albums.tsx                # Browse (memories, albums, search, utilities)
+  album/[id].tsx              # User album drill-down
+  category/[key].tsx          # Category drill-down
 
 src/
-  theme/                      # Color tokens + ThemeProvider (light/dark)
-  components/                 # Dock, GlassView, PhotoGrid, SegmentedControl, ...
-  hooks/                      # usePhotos, useAlbums
-  utils/                      # grouping (year / month / day bucket builder)
+  theme/                      # Color tokens + ThemeProvider (light/dark + semantic accents)
+  components/                 # Dock, GlassView, PhotoGrid, PhotoThumb, TabIcon, ...
+  hooks/                      # usePhotos, useAlbums, useTabScrollToTop
+  utils/                      # grouping (year / month / day bucket builder), categories
 
 assets/
   AppIcons/                   # Generated iOS, Android, and Play Store icons
@@ -156,8 +164,8 @@ The four secrets that need to exist on the repo:
 
 ```bash
 # Bump expo.version in app.json + the version in package.json, then commit.
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 GitHub Actions will:
@@ -214,14 +222,13 @@ Please open a [GitHub issue](https://github.com/DTS-11/Memoir/issues/new) and in
 
 - TypeScript strict mode — no `any` unless explicitly justified.
 - Components live under `src/components/`; screens live under `app/`.
-- Theme values come from `src/theme/tokens.ts` — do not hardcode colors or spacing.
+- Theme values come from `src/theme/tokens.ts` — do not hardcode colors or spacing. Use `semantic` constants for destructive/archive/favorite accent colors.
 - Animations belong in `react-native-reanimated`. Worklets imported from `react-native-worklets` (Reanimated 4 split).
 - Prefer composition over new top-level dependencies. If a new dependency is needed, mention it and the size impact in the PR description.
 
 ### Areas that need help
 
 - More smart albums (Live Photos detection across platforms, People, Places)
-- Long-press multi-select with batch share / delete
 - Real shared-element transition between grid and viewer
 - Accessibility pass (screen-reader labels, larger text support, reduce-motion)
 - iPad / large-screen layouts
