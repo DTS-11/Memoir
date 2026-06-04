@@ -1,4 +1,5 @@
 import "react-native-gesture-handler";
+import * as SplashScreen from "expo-splash-screen";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -7,6 +8,8 @@ import { View } from "react-native";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { UpdateBanner } from "../src/components/UpdateBanner";
 import { PhotoLibraryProvider } from "../src/hooks/usePhotos";
+
+SplashScreen.hideAsync().catch(() => {});
 
 function Root() {
   const { colors, isDark } = useTheme();

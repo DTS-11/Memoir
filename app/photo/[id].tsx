@@ -21,6 +21,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -81,6 +82,7 @@ export default function PhotoViewer() {
 
   const videoPlayer = useVideoPlayer(null, (p) => {
     p.loop = false;
+    p.timeUpdateEventInterval = 0.25;
   });
   const { isPlaying: videoPlaying } = useEvent(videoPlayer, "playingChange", {
     isPlaying: videoPlayer.playing,
@@ -103,8 +105,12 @@ export default function PhotoViewer() {
   const current = data[currentIndex] ?? fallbackPhoto ?? directPhoto;
   const displayUri = details?.localUri || current?.uri;
   const isCurrentVideo = current?.mediaType === "video";
-  const videoDuration =
-    videoStatus === "readyToPlay" ? videoPlayer.duration : 0;
+
+  const [videoDuration, setVideoDuration] = useState(0);
+  useEffect(() => {
+    const d = videoPlayer.duration;
+    if (d > 0) setVideoDuration(d);
+  }, [videoStatus, videoCurrentTime, videoPlayer]);
 
   const resetZoom = useCallback(() => {
     scale.value = withTiming(1, { duration: 140 });
@@ -172,6 +178,7 @@ export default function PhotoViewer() {
 
   useEffect(() => {
     if (current?.mediaType === "video" && current.uri) {
+      setVideoDuration(0);
       videoPlayer.replace(current.uri);
       videoPlayer.play();
     } else {
@@ -321,10 +328,12 @@ export default function PhotoViewer() {
   );
 
   const shareCurrent = useCallback(async () => {
-    if (!displayUri || !current) return;
+    if (!current) return;
     Haptics.selectionAsync();
-    await Share.share({ url: displayUri, message: current.filename });
-  }, [current, displayUri]);
+    const uri = details?.localUri ?? displayUri;
+    if (!uri) return;
+    await Share.share({ url: uri });
+  }, [current, details, displayUri]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!current) return;
@@ -750,34 +759,82 @@ function VideoScrubber({
   duration: number;
   onSeek: (t: number) => void;
 }) {
-  const [barWidth, setBarWidth] = useState(0);
-  const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+  const barWidth = useSharedValue(0);
+  const isDragging = useSharedValue(false);
+  const thumbX = useSharedValue(0);
+  const thumbScale = useSharedValue(1);
+  const durationSV = useSharedValue(duration);
+
+  useEffect(() => {
+    durationSV.value = duration;
+  }, [duration, durationSV]);
+
+  useEffect(() => {
+    if (!isDragging.value && barWidth.value > 0 && duration > 0) {
+      thumbX.value =
+        (Math.min(currentTime, duration) / duration) * barWidth.value;
+    }
+  }, [currentTime, duration, barWidth, isDragging, thumbX]);
+
+  const handleSeek = useCallback(
+    (x: number) => {
+      const d = durationSV.value;
+      const w = barWidth.value;
+      if (d > 0 && w > 0) onSeek((x / w) * d);
+    },
+    [onSeek, durationSV, barWidth],
+  );
+
+  const pan = Gesture.Pan()
+    .minDistance(0)
+    .onStart(() => {
+      isDragging.value = true;
+      thumbScale.value = withSpring(1.5, { damping: 20, stiffness: 400 });
+    })
+    .onUpdate((e) => {
+      thumbX.value = Math.max(0, Math.min(barWidth.value, e.x));
+    })
+    .onEnd(() => {
+      isDragging.value = false;
+      thumbScale.value = withSpring(1, { damping: 20, stiffness: 400 });
+      runOnJS(handleSeek)(thumbX.value);
+    });
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: thumbX.value,
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: thumbX.value - 6.5 },
+      { scale: thumbScale.value },
+    ],
+  }));
 
   return (
-    <Pressable
-      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-      onPress={(e) => {
-        if (barWidth > 0 && duration > 0) {
-          onSeek((e.nativeEvent.locationX / barWidth) * duration);
-        }
-      }}
+    <View
       style={scrubStyles.track}
+      onLayout={(e) => {
+        barWidth.value = e.nativeEvent.layout.width;
+      }}
     >
-      <View style={scrubStyles.rail} />
-      <View style={[scrubStyles.fill, { width: `${progress * 100}%` }]} />
-      <View
-        style={[
-          scrubStyles.thumb,
-          { left: Math.max(0, barWidth * progress - 6.5) },
-        ]}
-      />
-    </Pressable>
+      <GestureDetector gesture={pan}>
+        <View style={scrubStyles.hitArea}>
+          <View style={scrubStyles.rail} />
+          <Animated.View style={[scrubStyles.fill, fillStyle]} />
+          <Animated.View style={[scrubStyles.thumb, thumbStyle]} />
+        </View>
+      </GestureDetector>
+    </View>
   );
 }
 
 const scrubStyles = StyleSheet.create({
   track: {
     flex: 1,
+    justifyContent: "center",
+  },
+  hitArea: {
     height: 28,
     justifyContent: "center",
   },

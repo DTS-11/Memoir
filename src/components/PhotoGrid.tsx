@@ -10,20 +10,27 @@ import {
   useRef,
   type MutableRefObject,
 } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Photo } from "../hooks/usePhotos";
 import {
   buildGrid,
-  columnsForZoom,
+  FAMILY_COLUMNS,
   type GridItem,
-  type ZoomLevel,
+  type LayoutFamily,
 } from "../utils/grouping";
 import { PhotoThumb } from "./PhotoThumb";
 
 type Props = {
   photos: Photo[];
-  zoom: ZoomLevel;
+  family: LayoutFamily;
   onPressPhoto: (photo: Photo) => void;
   onLongPressPhoto?: (photo: Photo) => void;
   onToggleSelect?: (photo: Photo) => void;
@@ -35,6 +42,12 @@ type Props = {
   selectedIds?: Set<string>;
   favoriteIds?: Set<string>;
   inSelectMode?: boolean;
+  /** Called when the topmost visible section changes while scrolling. */
+  onSectionChange?: (title: string, subtitle?: string) => void;
+  /** Called with the current scroll Y offset (throttled to ~60 fps). */
+  onScrollY?: (y: number) => void;
+  /** Called once after layout with the full content height. */
+  onContentHeight?: (h: number) => void;
 };
 
 const SectionHeader = memo(function SectionHeader({
@@ -64,7 +77,7 @@ const SectionHeader = memo(function SectionHeader({
 
 export function PhotoGrid({
   photos,
-  zoom,
+  family,
   onPressPhoto,
   onLongPressPhoto,
   onToggleSelect,
@@ -76,18 +89,93 @@ export function PhotoGrid({
   selectedIds,
   favoriteIds,
   inSelectMode = false,
+  onSectionChange,
+  onScrollY,
+  onContentHeight,
 }: Props) {
   const { width } = useWindowDimensions();
-  const columns = columnsForZoom(zoom);
+  const columns = FAMILY_COLUMNS[family];
   const tileSize = width / columns;
 
   const items = useMemo<GridItem[]>(
-    () => buildGrid(photos, zoom),
-    [photos, zoom],
+    () => buildGrid(photos, family),
+    [photos, family],
   );
 
-  // Ref-based render state avoids recreating renderItem on every selection change.
-  // FlashList's extraData triggers re-renders while renderItem stays stable.
+  // Map each item id → its section header for O(1) lookup during scroll
+  const sectionMap = useMemo(() => {
+    const map = new Map<string, { title: string; subtitle?: string }>();
+    let cur: { title: string; subtitle?: string } | null = null;
+    for (const item of items) {
+      if (item.type === "header") {
+        cur = { title: item.title, subtitle: item.subtitle };
+        map.set(item.id, cur);
+      } else if (cur) {
+        map.set(item.id, cur);
+      }
+    }
+    return map;
+  }, [items]);
+
+  const lastSectionKey = useRef<string | null>(null);
+
+  const viewabilityConfig = useMemo(
+    () => ({ minimumViewTime: 0, itemVisiblePercentThreshold: 10 }),
+    [],
+  );
+
+  const onViewableItemsChanged = useCallback(
+    ({
+      viewableItems,
+    }: {
+      viewableItems: Array<{ item: GridItem; isViewable: boolean }>;
+    }) => {
+      if (!onSectionChange || viewableItems.length === 0) return;
+      const first = viewableItems[0].item;
+
+      let title: string | undefined;
+      let subtitle: string | undefined;
+      let key: string;
+
+      if (first.type === "header") {
+        title = first.title;
+        subtitle = first.subtitle;
+        key = first.id;
+      } else if (family === "all") {
+        // Derive month+year from the first visible photo
+        const d = new Date((first as { photo: Photo }).photo.creationTime);
+        title = d.toLocaleString(undefined, { month: "long", year: "numeric" });
+        key = title;
+      } else {
+        const entry = sectionMap.get(first.id);
+        if (!entry) return;
+        title = entry.title;
+        subtitle = entry.subtitle;
+        key = first.id;
+      }
+
+      if (key !== lastSectionKey.current) {
+        lastSectionKey.current = key;
+        onSectionChange(title!, subtitle);
+      }
+    },
+    [family, sectionMap, onSectionChange],
+  );
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onScrollY?.(e.nativeEvent.contentOffset.y);
+    },
+    [onScrollY],
+  );
+
+  const handleContentSizeChange = useCallback(
+    (_: number, h: number) => {
+      onContentHeight?.(h);
+    },
+    [onContentHeight],
+  );
+
   const rsRef = useRef({
     tileSize,
     onPressPhoto,
@@ -124,7 +212,7 @@ export function PhotoGrid({
         isFavorite={rs.favoriteIds?.has(photo.id) ?? false}
       />
     );
-  }, []); // stable — reads from rsRef
+  }, []);
 
   const extraData = useMemo(
     () => ({ selectedIds, favoriteIds, inSelectMode, tileSize }),
@@ -164,6 +252,11 @@ export function PhotoGrid({
       contentContainerStyle={contentContainerStyle}
       getItemType={getItemType}
       overrideItemLayout={overrideItemLayout}
+      viewabilityConfig={viewabilityConfig}
+      onViewableItemsChanged={onViewableItemsChanged}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+      onContentSizeChange={handleContentSizeChange}
     />
   );
 }

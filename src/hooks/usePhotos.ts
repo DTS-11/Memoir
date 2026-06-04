@@ -178,10 +178,13 @@ function usePhotosController() {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") refreshPermission();
+      if (s === "active") {
+        refreshPermission();
+        refresh();
+      }
     });
     return () => sub.remove();
-  }, [refreshPermission]);
+  }, [refreshPermission, refresh]);
 
   // ── derived lists ───────────────────────────────────────────────────────────
 

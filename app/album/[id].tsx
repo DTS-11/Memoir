@@ -67,7 +67,7 @@ export default function AlbumScreen() {
       {photos.length > 0 ? (
         <PhotoGrid
           photos={photos}
-          zoom={4}
+          family="days"
           onPressPhoto={onPressPhoto}
           onEndReached={loadMore}
           contentTopPadding={headerHeight}

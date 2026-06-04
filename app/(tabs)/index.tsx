@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import * as MediaLibrary from "expo-media-library/legacy";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-worklets";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,37 +19,36 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
+  withSequence,
 } from "react-native-reanimated";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { PhotoGrid } from "../../src/components/PhotoGrid";
 import { GlassView } from "../../src/components/GlassView";
-import { SegmentedControl } from "../../src/components/SegmentedControl";
 import { TopGlassBar } from "../../src/components/TopGlassBar";
 import { EmptyState } from "../../src/components/EmptyState";
+import { FastScrollBar } from "../../src/components/FastScrollBar";
 import {
-  clampZoom,
-  DEFAULT_ZOOM,
-  familyForZoom,
-  zoomForFamily,
-  zoomIn as zoomInLevel,
-  zoomOut as zoomOutLevel,
+  buildGrid,
+  computeSectionOffsets,
+  DEFAULT_FAMILY,
+  FAMILY_COLUMNS,
+  zoomInFamily,
+  zoomOutFamily,
   type LayoutFamily,
-  type ZoomLevel,
 } from "../../src/utils/grouping";
 import { addTabScrollToTopListener } from "../../src/hooks/useTabScrollToTop";
 import type { FlashListRef } from "@shopify/flash-list";
 import type { GridItem } from "../../src/utils/grouping";
 
-const familyOptions: { value: LayoutFamily; label: string }[] = [
-  { value: "years", label: "Years" },
-  { value: "months", label: "Months" },
-  { value: "days", label: "Days" },
-  { value: "all", label: "All Photos" },
-];
-
 const TOOLBAR_HEIGHT = 56;
-const SPRING = { damping: 22, stiffness: 280, mass: 0.8 } as const;
+const SELECT_BAR_SPRING = { damping: 22, stiffness: 280, mass: 0.8 } as const;
+const ZOOM_SPRING = { damping: 18, stiffness: 300, mass: 0.7 } as const;
+
+// Pinch scale thresholds — intentionally low for effortless trigger
+const PINCH_IN_THRESHOLD = 1.08;
+const PINCH_OUT_THRESHOLD = 0.93;
 
 export default function Library() {
   const { colors, typography } = useTheme();
@@ -57,12 +65,27 @@ export default function Library() {
     archivePhotosBulk,
   } = usePhotos();
 
-  const [zoom, setZoom] = useState<ZoomLevel>(DEFAULT_ZOOM);
+  const { width, height } = useWindowDimensions();
+
+  const [family, setFamily] = useState<LayoutFamily>(DEFAULT_FAMILY);
   const [inSelectMode, setInSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sectionTitle, setSectionTitle] = useState<string | null>(null);
+  const [sectionSub, setSectionSub] = useState<string | undefined>();
 
   const gridRef = useRef<FlashListRef<GridItem> | null>(null);
   const toolbarOffset = useSharedValue(TOOLBAR_HEIGHT + 20);
+  const scrollFraction = useSharedValue(0);
+  const contentHeightRef = useRef(1);
+
+  // Reanimated shared values for pinch animation
+  const gridScale = useSharedValue(1);
+  const hasTriggered = useSharedValue(false);
+  const inSelectModeShared = useSharedValue(false);
+
+  useEffect(() => {
+    inSelectModeShared.value = inSelectMode;
+  }, [inSelectMode, inSelectModeShared]);
 
   // ── scroll to top ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -75,37 +98,59 @@ export default function Library() {
   useEffect(() => {
     toolbarOffset.value = withSpring(
       inSelectMode ? 0 : TOOLBAR_HEIGHT + 20,
-      SPRING,
+      SELECT_BAR_SPRING,
     );
   }, [inSelectMode, toolbarOffset]);
 
   // ── zoom ─────────────────────────────────────────────────────────────────────
-  const setFamily = useCallback((f: LayoutFamily) => {
-    setZoom((prev) => {
-      const next = zoomForFamily(f);
-      if (familyForZoom(prev) !== f) Haptics.selectionAsync();
+  const doZoomIn = useCallback(() => {
+    setFamily((f) => {
+      const next = zoomInFamily(f);
+      if (next !== f) {
+        Haptics.selectionAsync();
+        gridScale.value = withSequence(
+          withTiming(1.06, { duration: 80 }),
+          withSpring(1, ZOOM_SPRING),
+        );
+      }
       return next;
     });
-  }, []);
+  }, [gridScale]);
 
-  const stepZoom = useCallback((dir: "in" | "out") => {
-    setZoom((prev) => {
-      const next = dir === "in" ? zoomInLevel(prev) : zoomOutLevel(prev);
-      if (next !== prev) Haptics.selectionAsync();
-      return clampZoom(next);
+  const doZoomOut = useCallback(() => {
+    setFamily((f) => {
+      const next = zoomOutFamily(f);
+      if (next !== f) {
+        Haptics.selectionAsync();
+        gridScale.value = withSequence(
+          withTiming(0.94, { duration: 80 }),
+          withSpring(1, ZOOM_SPRING),
+        );
+      }
+      return next;
     });
-  }, []);
+  }, [gridScale]);
 
-  const pinch = useMemo(
-    () =>
-      Gesture.Pinch().onEnd((e) => {
-        if (!inSelectMode) {
-          if (e.scale > 1.2) runOnJS(stepZoom)("in");
-          else if (e.scale < 0.85) runOnJS(stepZoom)("out");
-        }
-      }),
-    [stepZoom, inSelectMode],
-  );
+  const pinch = Gesture.Pinch()
+    .onStart(() => {
+      hasTriggered.value = false;
+    })
+    .onUpdate((e) => {
+      if (inSelectModeShared.value) return;
+      // Real-time visual scale — clamped so it never looks broken
+      gridScale.value = Math.max(0.82, Math.min(1.22, e.scale));
+      if (hasTriggered.value) return;
+      if (e.scale > PINCH_IN_THRESHOLD) {
+        hasTriggered.value = true;
+        runOnJS(doZoomIn)();
+      } else if (e.scale < PINCH_OUT_THRESHOLD) {
+        hasTriggered.value = true;
+        runOnJS(doZoomOut)();
+      }
+    })
+    .onEnd(() => {
+      gridScale.value = withSpring(1, ZOOM_SPRING);
+    });
 
   // ── select mode ───────────────────────────────────────────────────────────────
   const inSelectModeRef = useRef(inSelectMode);
@@ -158,13 +203,14 @@ export default function Library() {
 
   const shareSelected = useCallback(async () => {
     if (!hasSelection) return;
-    const uris = photos.filter((p) => selectedIds.has(p.id)).map((p) => p.uri);
-    if (uris.length === 1) {
-      await Share.share({ url: uris[0] });
-    } else {
-      // React Native Share doesn't support multiple files natively; share first
-      await Share.share({ url: uris[0], message: `${uris.length} photos` });
-    }
+    const selected = photos.filter((p) => selectedIds.has(p.id));
+    const infos = await Promise.all(
+      selected.map((p) =>
+        MediaLibrary.getAssetInfoAsync(p.id).catch(() => null),
+      ),
+    );
+    const uri = infos[0]?.localUri ?? selected[0]?.uri;
+    if (uri) await Share.share({ url: uri });
     cancelSelectMode();
   }, [hasSelection, photos, selectedIds, cancelSelectMode]);
 
@@ -234,7 +280,6 @@ export default function Library() {
     cancelSelectMode,
   ]);
 
-  // ── derived all-favorited state for bulk heart icon ───────────────────────────
   const allSelectedFavorited =
     hasSelection && Array.from(selectedIds).every((id) => favoriteIds.has(id));
 
@@ -242,13 +287,57 @@ export default function Library() {
     if (permission === "undetermined") requestPermission();
   }, [permission, requestPermission]);
 
-  const headerHeight = insets.top + 60 + (inSelectMode ? 0 : 44 + 18);
+  const headerHeight = insets.top + 76;
   const dockClearance = insets.bottom + 90;
+
+  // ── section title + scrollbar data ───────────────────────────────────────────
+  const handleSectionChange = useCallback(
+    (title: string, subtitle?: string) => {
+      setSectionTitle(title);
+      setSectionSub(subtitle);
+    },
+    [],
+  );
+
+  const handleScrollY = useCallback(
+    (y: number) => {
+      const maxY = Math.max(1, contentHeightRef.current - height);
+      scrollFraction.value = Math.max(0, Math.min(1, y / maxY));
+    },
+    [height, scrollFraction],
+  );
+
+  const handleContentHeight = useCallback((h: number) => {
+    contentHeightRef.current = h;
+  }, []);
+
+  const columns = FAMILY_COLUMNS[family];
+  const tileSize = width / columns;
+
+  const gridItems = useMemo(() => buildGrid(photos, family), [photos, family]);
+
+  const sections = useMemo(
+    () => computeSectionOffsets(gridItems, columns, tileSize, headerHeight),
+    [gridItems, columns, tileSize, headerHeight],
+  );
+
+  const scrollBarContainerH = height - headerHeight - (insets.bottom + 90);
+  const displayTitle =
+    sectionTitle ??
+    (family === "all"
+      ? "All Photos"
+      : family.charAt(0).toUpperCase() + family.slice(1));
+  const displaySub = sectionTitle
+    ? sectionSub
+    : `${totalCount.toLocaleString()} item${totalCount === 1 ? "" : "s"}`;
   const selectToolbarBottom = insets.bottom + 80;
-  const family = familyForZoom(zoom);
 
   const toolbarAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: toolbarOffset.value }],
+  }));
+
+  const gridAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: gridScale.value }],
   }));
 
   if (permission === "denied" || permission === "undetermined") {
@@ -282,11 +371,11 @@ export default function Library() {
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
       <GestureDetector gesture={pinch}>
-        <View style={styles.fill}>
+        <Animated.View style={[styles.fill, gridAnimStyle]}>
           <PhotoGrid
             listRef={gridRef}
             photos={photos}
-            zoom={zoom}
+            family={family}
             onPressPhoto={onPressPhoto}
             onLongPressPhoto={onLongPressPhoto}
             onToggleSelect={toggleSelect}
@@ -298,8 +387,11 @@ export default function Library() {
             selectedIds={selectedIds}
             favoriteIds={favoriteIds}
             inSelectMode={inSelectMode}
+            onSectionChange={handleSectionChange}
+            onScrollY={handleScrollY}
+            onContentHeight={handleContentHeight}
           />
-        </View>
+        </Animated.View>
       </GestureDetector>
 
       {/* Top bar — swaps between normal and select mode */}
@@ -348,41 +440,11 @@ export default function Library() {
             </Pressable>
           </View>
         ) : (
-          <>
-            <TopGlassBar
-              title="Library"
-              subtitle={`${totalCount.toLocaleString()} item${totalCount === 1 ? "" : "s"}`}
-              right={
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => enterSelectMode()}
-                  style={styles.iconBtn}
-                >
-                  <Ionicons
-                    name="checkmark-circle-outline"
-                    size={26}
-                    color={colors.accent}
-                  />
-                </Pressable>
-              }
-            />
-            <View
-              style={[
-                styles.segmentWrap,
-                { backgroundColor: colors.background },
-              ]}
-            >
-              <SegmentedControl
-                options={familyOptions}
-                value={family}
-                onChange={setFamily}
-              />
-            </View>
-          </>
+          <TopGlassBar title={displayTitle} subtitle={displaySub} />
         )}
       </View>
 
-      {/* Bulk action toolbar — slides up from bottom when in select mode */}
+      {/* Bulk action toolbar */}
       <Animated.View
         style={[
           styles.toolbar,
@@ -422,6 +484,19 @@ export default function Library() {
           />
         </GlassView>
       </Animated.View>
+
+      {/* Pullable scrollbar — hidden in select mode */}
+      {!inSelectMode && (
+        <FastScrollBar
+          scrollFraction={scrollFraction}
+          containerHeight={scrollBarContainerH}
+          contentHeight={contentHeightRef.current}
+          sections={sections}
+          family={family}
+          listRef={gridRef}
+          topOffset={headerHeight}
+        />
+      )}
     </View>
   );
 }
@@ -465,13 +540,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-  },
-  segmentWrap: {
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  iconBtn: {
-    paddingBottom: 2,
   },
   selectBar: {
     flexDirection: "row",

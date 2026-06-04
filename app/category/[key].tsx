@@ -43,7 +43,7 @@ export default function CategoryScreen() {
       {filtered.length > 0 ? (
         <PhotoGrid
           photos={filtered}
-          zoom={4}
+          family="days"
           onPressPhoto={onPressPhoto}
           onEndReached={hasMore ? loadMore : undefined}
           contentTopPadding={headerHeight}

@@ -11,7 +11,6 @@ import { EmptyState } from "../src/components/EmptyState";
 import type { GridItem } from "../src/utils/grouping";
 import { buildGrid } from "../src/utils/grouping";
 
-const ZOOM = 12; // 3-column grid
 const COLS = 3;
 
 export default function FavoritesScreen() {
@@ -21,7 +20,7 @@ export default function FavoritesScreen() {
   const listRef = useRef<FlashListRef<GridItem> | null>(null);
   const [tileWidth, setTileWidth] = useState(0);
 
-  const items = buildGrid(favoritePhotos, ZOOM);
+  const items = buildGrid(favoritePhotos, "all");
 
   const onPressPhoto = useCallback((p: Photo) => {
     router.push({ pathname: "/photo/[id]", params: { id: p.id } });

@@ -52,7 +52,6 @@ function PhotoThumbImpl({
         style={[
           styles.tile,
           { borderRadius: radius, backgroundColor: colors.thumbPlaceholder },
-          selected && styles.tileSelected,
         ]}
       >
         <Image
@@ -69,6 +68,11 @@ function PhotoThumbImpl({
         {/* Dim overlay when selected */}
         {selected && <View style={styles.selectedDim} />}
 
+        {/* Selection ring — drawn as an overlay so it never affects image layout */}
+        {selected && (
+          <View style={[styles.selectionRing, { borderRadius: radius }]} />
+        )}
+
         {isVideo && (
           <View style={styles.videoBadge}>
             <Text style={styles.videoText}>
@@ -77,14 +81,12 @@ function PhotoThumbImpl({
           </View>
         )}
 
-        {/* Favorite heart badge */}
         {isFavorite && !inSelectMode && (
           <View style={styles.favBadge}>
             <Ionicons name="heart" size={11} color="#FFF" />
           </View>
         )}
 
-        {/* Select mode checkmark */}
         {inSelectMode && (
           <View
             style={[styles.checkCircle, selected && styles.checkCircleSelected]}
@@ -116,12 +118,15 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
   },
-  tileSelected: {
-    borderWidth: 2,
+  // Drawn on top of the image as an absoluteFill overlay — never modifies tile
+  // layout so it can't clip or hide the image beneath it.
+  selectionRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 3,
     borderColor: "#007AFF",
   },
   selectedDim: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   videoBadge: {
