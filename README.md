@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/AppIcons/appstore.png" alt="Memoir app icon" width="128" height="128" />
+<img src="assets/memoir_logo.png" alt="Memoir app icon" width="128" height="128" />
 
 # Memoir
 
@@ -100,7 +100,7 @@ src/
   utils/                      # grouping (year / month / day bucket builder), categories
 
 assets/
-  AppIcons/                   # Generated iOS, Android, and Play Store icons
+  memoir_logo.png             # App icon + splash (1024×1024 PNG)
 ```
 
 ## Permissions
@@ -171,7 +171,7 @@ git push origin v0.4.0
 GitHub Actions will:
 
 1. Install JS dependencies with Bun.
-2. Run `expo prebuild --platform android` to materialise the native Android project (the launcher icon and splash come straight from `assets/AppIcons/`).
+2. Run `expo prebuild --platform android` to materialise the native Android project (the launcher icon and splash come straight from `assets/memoir_logo.png`).
 3. Decode the keystore from `ANDROID_KEYSTORE_BASE64` into `android/app/release.keystore`.
 4. Patch `android/app/build.gradle` to add a `release` signing config (see `scripts/patch-android-signing.mjs`).
 5. Build a signed release APK with `./gradlew assembleRelease`.

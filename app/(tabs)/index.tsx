@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -43,6 +45,7 @@ import type { FlashListRef } from "@shopify/flash-list";
 import type { GridItem } from "../../src/utils/grouping";
 
 const TOOLBAR_HEIGHT = 56;
+const FAMILY_KEY = "memoir.layoutFamily.v1";
 const SELECT_BAR_SPRING = { damping: 22, stiffness: 280, mass: 0.8 } as const;
 const ZOOM_SPRING = { damping: 18, stiffness: 300, mass: 0.7 } as const;
 
@@ -63,11 +66,30 @@ export default function Library() {
     setFavoritesBulk,
     moveToRecentlyDeletedBulk,
     archivePhotosBulk,
+    safNeedsPermission,
+    requestSafAccess,
+    dismissSafPermission,
   } = usePhotos();
 
   const { width, height } = useWindowDimensions();
 
   const [family, setFamily] = useState<LayoutFamily>(DEFAULT_FAMILY);
+
+  useEffect(() => {
+    AsyncStorage.getItem(FAMILY_KEY)
+      .then((saved) => {
+        if (
+          saved === "days" ||
+          saved === "months" ||
+          saved === "years" ||
+          saved === "all"
+        ) {
+          setFamily(saved);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [inSelectMode, setInSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sectionTitle, setSectionTitle] = useState<string | null>(null);
@@ -75,6 +97,7 @@ export default function Library() {
 
   const gridRef = useRef<FlashListRef<GridItem> | null>(null);
   const toolbarOffset = useSharedValue(TOOLBAR_HEIGHT + 20);
+  const toolbarOpacity = useSharedValue(0);
   const scrollFraction = useSharedValue(0);
   const contentHeightRef = useRef(1);
 
@@ -100,7 +123,8 @@ export default function Library() {
       inSelectMode ? 0 : TOOLBAR_HEIGHT + 20,
       SELECT_BAR_SPRING,
     );
-  }, [inSelectMode, toolbarOffset]);
+    toolbarOpacity.value = withTiming(inSelectMode ? 1 : 0, { duration: 150 });
+  }, [inSelectMode, toolbarOffset, toolbarOpacity]);
 
   // ── zoom ─────────────────────────────────────────────────────────────────────
   const doZoomIn = useCallback(() => {
@@ -112,6 +136,7 @@ export default function Library() {
           withTiming(1.06, { duration: 80 }),
           withSpring(1, ZOOM_SPRING),
         );
+        AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
       }
       return next;
     });
@@ -126,6 +151,7 @@ export default function Library() {
           withTiming(0.94, { duration: 80 }),
           withSpring(1, ZOOM_SPRING),
         );
+        AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
       }
       return next;
     });
@@ -206,7 +232,9 @@ export default function Library() {
     const selected = photos.filter((p) => selectedIds.has(p.id));
     const infos = await Promise.all(
       selected.map((p) =>
-        MediaLibrary.getAssetInfoAsync(p.id).catch(() => null),
+        p.id.startsWith("saf:")
+          ? Promise.resolve({ localUri: p.uri } as { localUri: string })
+          : MediaLibrary.getAssetInfoAsync(p.id).catch(() => null),
       ),
     );
     const uri = infos[0]?.localUri ?? selected[0]?.uri;
@@ -338,6 +366,7 @@ export default function Library() {
 
   const toolbarAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: toolbarOffset.value }],
+    opacity: toolbarOpacity.value,
   }));
 
   const gridAnimStyle = useAnimatedStyle(() => ({
@@ -345,7 +374,9 @@ export default function Library() {
   }));
 
   if (permission === "undetermined") {
-    return <View style={[styles.fill, { backgroundColor: colors.background }]} />;
+    return (
+      <View style={[styles.fill, { backgroundColor: colors.background }]} />
+    );
   }
 
   if (permission === "denied") {
@@ -493,6 +524,40 @@ export default function Library() {
         </GlassView>
       </Animated.View>
 
+      {/* SAF access banner (Android only, shown until granted or dismissed) */}
+      {Platform.OS === "android" && safNeedsPermission && !inSelectMode && (
+        <View
+          style={[
+            styles.safBanner,
+            { bottom: insets.bottom + 100, backgroundColor: colors.surface },
+          ]}
+        >
+          <Ionicons
+            name="folder-open-outline"
+            size={20}
+            color={colors.accent}
+            style={{ marginTop: 1 }}
+          />
+          <Text
+            style={[
+              typography.footnote,
+              { color: colors.text, flex: 1, lineHeight: 18 },
+            ]}
+          >
+            Some app photos (e.g. WhatsApp) may be hidden.{" "}
+            <Text
+              style={{ color: colors.accent, fontWeight: "700" }}
+              onPress={requestSafAccess}
+            >
+              Allow folder access
+            </Text>
+          </Text>
+          <Pressable onPress={dismissSafPermission} hitSlop={12}>
+            <Ionicons name="close" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      )}
+
       {/* Pullable scrollbar — hidden in select mode */}
       {!inSelectMode && (
         <FastScrollBar
@@ -584,5 +649,22 @@ const styles = StyleSheet.create({
   toolbarLabel: {
     fontSize: 10,
     fontWeight: "600",
+  },
+  safBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
 });

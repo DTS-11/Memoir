@@ -13,7 +13,7 @@ export const categories: Category[] = [
     key: "recent",
     label: "Recently Added",
     icon: "time-outline",
-    match: () => true,
+    match: (p) => p.creationTime > Date.now() - 30 * 24 * 60 * 60 * 1000,
   },
   {
     key: "video",
@@ -22,10 +22,16 @@ export const categories: Category[] = [
     match: (p) => p.mediaType === "video",
   },
   {
-    key: "audio",
-    label: "Audio",
-    icon: "musical-notes-outline",
-    match: (p) => p.mediaType === "audio",
+    key: "screenshot",
+    label: "Screenshots",
+    icon: "phone-portrait-outline",
+    match: (p) => /screenshot/i.test(p.filename),
+  },
+  {
+    key: "selfie",
+    label: "Selfies",
+    icon: "person-circle-outline",
+    match: (p) => /selfie|front.?cam/i.test(p.filename),
   },
   {
     key: "live",
@@ -34,22 +40,35 @@ export const categories: Category[] = [
     match: (p) => p.duration > 0 && p.duration < 4 && p.mediaType === "photo",
   },
   {
-    key: "screenshot",
-    label: "Screenshots",
-    icon: "phone-portrait-outline",
-    match: (p) => /screenshot/i.test(p.filename),
-  },
-  {
     key: "pano",
     label: "Panoramas",
     icon: "scan-outline",
-    match: (p) => p.width / Math.max(1, p.height) > 2,
+    match: (p) => p.width > 0 && p.width / Math.max(1, p.height) > 2,
   },
   {
-    key: "selfie",
-    label: "Selfies",
-    icon: "person-circle-outline",
-    match: (p) => /selfie|front/i.test(p.filename),
+    key: "gif",
+    label: "GIFs",
+    icon: "images-outline",
+    match: (p) => /\.gif$/i.test(p.filename),
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    icon: "chatbubble-ellipses-outline",
+    match: (p) => /[-_]WA\d+\./i.test(p.filename),
+  },
+  {
+    key: "audio",
+    label: "Audio",
+    icon: "musical-notes-outline",
+    match: (p) => p.mediaType === "audio",
+  },
+  {
+    key: "raw",
+    label: "RAW Photos",
+    icon: "aperture-outline",
+    match: (p) =>
+      /\.(dng|raw|arw|cr2|nef|orf|rw2|raf|3fr|iiq)$/i.test(p.filename),
   },
 ];
 

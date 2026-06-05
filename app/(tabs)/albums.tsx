@@ -1,13 +1,30 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
+  LayoutAnimation,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   View,
   useWindowDimensions,
 } from "react-native";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,6 +33,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { addTabScrollToTopListener } from "../../src/hooks/useTabScrollToTop";
 import { useAlbums, type AlbumPreview } from "../../src/hooks/useAlbums";
+import { useMediaCounts } from "../../src/hooks/useMediaCounts";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { categories } from "../../src/utils/categories";
 import { GlassView } from "../../src/components/GlassView";
@@ -74,9 +92,15 @@ export default function BrowseScreen() {
   const { permission, photos, favoritePhotos, archivedPhotos, deletedItems } =
     usePhotos();
   const enabled = permission === "granted" || permission === "limited";
-  const { albums, smart } = useAlbums(enabled);
+  const { albums } = useAlbums(enabled);
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState("");
+  const [albumsExpanded, setAlbumsExpanded] = useState(false);
+
+  const toggleAlbums = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setAlbumsExpanded((v) => !v);
+  }, []);
   const scrollRef = useRef<ScrollView>(null);
 
   const cardW = (width - 16 * 2 - 8 * 2) / 3;
@@ -84,14 +108,15 @@ export default function BrowseScreen() {
   const memCardW = Math.min(width - 64, 320);
 
   const memories = useMemo(() => buildMemories(photos), [photos]);
+  const mediaCounts = useMediaCounts(enabled);
 
   const categoryCounts = useMemo(
     () =>
       categories.map((c) => ({
         ...c,
-        count: photos.reduce((n, p) => n + (c.match(p) ? 1 : 0), 0),
+        count: mediaCounts[c.key] ?? 0,
       })),
-    [photos],
+    [mediaCounts],
   );
 
   const filtered = useMemo(() => {
@@ -118,22 +143,18 @@ export default function BrowseScreen() {
   }, []);
 
   const openAlbum = useCallback((a: AlbumPreview) => {
-    if (a.type === "smart") {
-      router.push({
-        pathname: "/category/[key]",
-        params: { key: a.id.replace(/^smart:/i, "").toLowerCase() },
-      });
-    } else {
-      router.push({
-        pathname: "/album/[id]",
-        params: { id: a.id, title: a.title },
-      });
-    }
+    router.push({
+      pathname: "/album/[id]",
+      params: { id: a.id, title: a.title },
+    });
   }, []);
 
   const openFavorites = useCallback(() => router.push("/favorites"), []);
   const openArchive = useCallback(() => router.push("/archive"), []);
-  const openRecentlyDeleted = useCallback(() => router.push("/recently-deleted"), []);
+  const openRecentlyDeleted = useCallback(
+    () => router.push("/recently-deleted"),
+    [],
+  );
 
   // top padding = safe area + search bar height + small gap
   const scrollTopPad = insets.top + SEARCH_BAR_H + 8;
@@ -221,39 +242,32 @@ export default function BrowseScreen() {
             {/* My Albums */}
             {albums.length > 0 && (
               <>
-                <SectionTitle title="My Albums" />
-                <View style={styles.albumGrid}>
-                  {albums.map((a) => (
-                    <AlbumCard
-                      key={a.id}
-                      album={a}
-                      width={cardW}
-                      onPress={openAlbum}
-                    />
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Media Types */}
-            {smart.length > 0 && (
-              <>
-                <SectionTitle title="Media Types" />
-                <View
-                  style={[
-                    styles.list,
-                    { backgroundColor: colors.surfaceElevated },
-                  ]}
-                >
-                  {smart.map((s, i) => (
-                    <SmartRow
-                      key={s.id}
-                      album={s}
-                      divider={i < smart.length - 1}
-                      onPress={openAlbum}
-                    />
-                  ))}
-                </View>
+                <SectionTitle
+                  title="My Albums"
+                  accessory={
+                    <View style={styles.albumsBadge}>
+                      <Text style={styles.albumsCount}>{albums.length}</Text>
+                      <Ionicons
+                        name={albumsExpanded ? "chevron-up" : "chevron-down"}
+                        size={14}
+                        color="rgba(128,128,128,0.8)"
+                      />
+                    </View>
+                  }
+                  onPress={toggleAlbums}
+                />
+                {albumsExpanded && (
+                  <View style={styles.albumGrid}>
+                    {albums.map((a) => (
+                      <AlbumCard
+                        key={a.id}
+                        album={a}
+                        width={cardW}
+                        onPress={openAlbum}
+                      />
+                    ))}
+                  </View>
+                )}
               </>
             )}
 
@@ -366,17 +380,25 @@ export default function BrowseScreen() {
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
-function SectionTitle({ title }: { title: string }) {
+function SectionTitle({
+  title,
+  accessory,
+  onPress,
+}: {
+  title: string;
+  accessory?: React.ReactNode;
+  onPress?: () => void;
+}) {
   const { colors, typography } = useTheme();
   return (
-    <Text
-      style={[
-        typography.title2,
-        { color: colors.text, marginTop: 24, marginBottom: 12 },
-      ]}
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={[styles.sectionHeader, { marginTop: 24, marginBottom: 12 }]}
     >
-      {title}
-    </Text>
+      <Text style={[typography.title2, { color: colors.text }]}>{title}</Text>
+      {accessory}
+    </Pressable>
   );
 }
 
@@ -389,10 +411,14 @@ const MemoryCard = memo(function MemoryCard({
 }) {
   const cover = memory.photos[0];
   const onPress = useCallback(() => {
-    if (cover) router.push({ pathname: "/photo/[id]", params: { id: cover.id } });
+    if (cover)
+      router.push({ pathname: "/photo/[id]", params: { id: cover.id } });
   }, [cover]);
   return (
-    <Pressable onPress={onPress} style={[styles.memCard, { width, height: width * 0.72 }]}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.memCard, { width, height: width * 0.72 }]}
+    >
       {cover && (
         <Image
           source={{ uri: cover.uri }}
@@ -466,54 +492,6 @@ const AlbumCard = memo(function AlbumCard({
   );
 });
 
-const SmartRow = memo(function SmartRow({
-  album,
-  divider,
-  onPress,
-}: {
-  album: AlbumPreview;
-  divider: boolean;
-  onPress: (a: AlbumPreview) => void;
-}) {
-  const { colors, typography } = useTheme();
-  const handlePress = useCallback(() => onPress(album), [onPress, album]);
-  return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [
-        styles.row,
-        divider && {
-          borderBottomColor: colors.separator,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-        },
-        pressed && { backgroundColor: colors.surface },
-      ]}
-    >
-      <View
-        style={[styles.rowThumb, { backgroundColor: colors.thumbPlaceholder }]}
-      >
-        {album.coverUri && (
-          <Image
-            source={{ uri: album.coverUri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-          />
-        )}
-      </View>
-      <Text
-        style={[typography.body, { color: colors.text, flex: 1 }]}
-        numberOfLines={1}
-      >
-        {album.title}
-      </Text>
-      <Text style={[typography.subhead, { color: colors.textSecondary }]}>
-        {album.count.toLocaleString()}
-      </Text>
-      <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
-    </Pressable>
-  );
-});
-
 const UtilityRow = memo(function UtilityRow({
   icon,
   iconColor,
@@ -577,7 +555,12 @@ const UtilityRow = memo(function UtilityRow({
   );
 });
 
-type CategoryCount = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; count: number };
+type CategoryCount = {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  count: number;
+};
 
 const CategoryRow = memo(function CategoryRow({
   cat,
@@ -588,7 +571,8 @@ const CategoryRow = memo(function CategoryRow({
 }) {
   const { colors, typography } = useTheme();
   const onPress = useCallback(
-    () => router.push({ pathname: "/category/[key]", params: { key: cat.key } }),
+    () =>
+      router.push({ pathname: "/category/[key]", params: { key: cat.key } }),
     [cat.key],
   );
   return (
@@ -648,6 +632,23 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
+  },
+
+  // section header
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  albumsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  albumsCount: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "rgba(128,128,128,0.8)",
   },
 
   // albums grid

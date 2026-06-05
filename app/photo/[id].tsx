@@ -137,7 +137,7 @@ export default function PhotoViewer() {
   }, [data.length, id]);
 
   useEffect(() => {
-    if (data.length > 0 || !id) return;
+    if (data.length > 0 || !id || id.startsWith("saf:")) return;
     MediaLibrary.getAssetInfoAsync(id)
       .then((info) => {
         if (!info) return;
@@ -161,6 +161,10 @@ export default function PhotoViewer() {
     if (!current?.id) return;
     resetZoom();
     setInfoVisible(false);
+    if (current.id.startsWith("saf:")) {
+      setDetails(current);
+      return;
+    }
     MediaLibrary.getAssetInfoAsync(current.id)
       .then((info) => {
         if (!info) return;
@@ -337,14 +341,15 @@ export default function PhotoViewer() {
     if (!current) return;
     Haptics.selectionAsync();
 
-    // Prefer the already-loaded localUri; if not ready yet, fetch it now.
     let fileUri = details?.localUri ?? null;
     if (!fileUri) {
-      try {
-        const info = await MediaLibrary.getAssetInfoAsync(current.id);
-        fileUri = info?.localUri ?? null;
-      } catch {
-        // ignore — fall through to the guard below
+      if (current.id.startsWith("saf:")) {
+        fileUri = current.uri;
+      } else {
+        try {
+          const info = await MediaLibrary.getAssetInfoAsync(current.id);
+          fileUri = info?.localUri ?? null;
+        } catch {}
       }
     }
 

@@ -1,4 +1,5 @@
 import * as MediaLibrary from "expo-media-library/legacy";
+import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
@@ -28,6 +29,87 @@ const PAGE_SIZE = 200;
 const RECENTLY_DELETED_KEY = "memoir.recentlyDeleted.v1";
 const FAVORITES_KEY = "memoir.favorites.v1";
 const ARCHIVE_KEY = "memoir.archived.v1";
+const SAF_MEDIA_URI_KEY = "memoir.safMediaUri.v1";
+const SAF_DISMISSED_KEY = "memoir.safDismissed.v1";
+
+// ── SAF scanning helpers (Android only) ────────────────────────────────────────
+
+const MEDIA_EXTS =
+  /\.(jpe?g|png|gif|heic|heif|webp|tiff?|bmp|mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
+const VIDEO_EXTS = /\.(mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
+
+function getSafFilename(uri: string): string {
+  const encoded = uri.split("%2F").pop() ?? uri.split("/").pop() ?? "";
+  return decodeURIComponent(encoded.replace(/\+/g, "%20"));
+}
+
+function parseFilenameTimestamp(filename: string): number {
+  // WhatsApp: IMG-YYYYMMDD-WA####.ext
+  const wa = filename.match(/[A-Za-z]+-(\d{8})-WA\d+\./i);
+  if (wa) {
+    const d = wa[1];
+    const t = new Date(
+      +d.slice(0, 4),
+      +d.slice(4, 6) - 1,
+      +d.slice(6, 8),
+    ).getTime();
+    if (t > 0) return t;
+  }
+  // Telegram: photo_YYYY-MM-DD_HH-MM-SS or video_YYYY-MM-DD_HH-MM-SS
+  const tg = filename.match(
+    /\w+_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/,
+  );
+  if (tg) {
+    const t = new Date(
+      +tg[1],
+      +tg[2] - 1,
+      +tg[3],
+      +tg[4],
+      +tg[5],
+      +tg[6],
+    ).getTime();
+    if (t > 0) return t;
+  }
+  // 13-digit unix timestamp in filename
+  const ts = filename.match(/^(\d{13})\./);
+  if (ts) {
+    const t = +ts[1];
+    if (t > 1_000_000_000_000) return t;
+  }
+  return 0;
+}
+
+async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
+  if (depth > 7) return [];
+  let entries: string[];
+  try {
+    entries =
+      await FileSystem.StorageAccessFramework.readDirectoryAsync(dirUri);
+  } catch {
+    return [];
+  }
+  const photos: Photo[] = [];
+  for (const entry of entries) {
+    const filename = getSafFilename(entry);
+    if (!filename) continue;
+    if (MEDIA_EXTS.test(filename)) {
+      photos.push({
+        id: `saf:${entry}`,
+        uri: entry,
+        width: 0,
+        height: 0,
+        creationTime: parseFilenameTimestamp(filename) || Date.now(),
+        duration: 0,
+        mediaType: VIDEO_EXTS.test(filename) ? "video" : "photo",
+        filename,
+      });
+    } else if (!filename.startsWith(".")) {
+      const sub = await scanSafDir(entry, depth + 1);
+      photos.push(...sub);
+    }
+  }
+  return photos;
+}
 
 export type RecentlyDeletedPhoto = Photo & { deletedAt: number };
 
@@ -46,6 +128,8 @@ function mapPermission(
 function usePhotosController() {
   const [permission, setPermission] = useState<PermissionState>("undetermined");
   const [rawPhotos, setRawPhotos] = useState<Photo[]>([]);
+  const [safPhotos, setSafPhotos] = useState<Photo[]>([]);
+  const [safNeedsPermission, setSafNeedsPermission] = useState(false);
   const [deletedItems, setDeletedItems] = useState<RecentlyDeletedPhoto[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
@@ -193,6 +277,60 @@ function usePhotosController() {
     return () => sub.remove();
   }, [refreshPermission, refresh]);
 
+  // ── SAF scanning (Android only) ─────────────────────────────────────────────
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    (async () => {
+      try {
+        const [[, savedUri], [, dismissed]] = await AsyncStorage.multiGet([
+          SAF_MEDIA_URI_KEY,
+          SAF_DISMISSED_KEY,
+        ]);
+        if (dismissed === "1") return;
+        if (!savedUri) {
+          setSafNeedsPermission(true);
+          return;
+        }
+        const found = await scanSafDir(savedUri);
+        if (found.length > 0) {
+          setSafPhotos(found);
+        } else {
+          await AsyncStorage.removeItem(SAF_MEDIA_URI_KEY).catch(() => {});
+          setSafNeedsPermission(true);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const requestSafAccess = useCallback(async () => {
+    if (Platform.OS !== "android") return;
+    try {
+      const initialUri =
+        FileSystem.StorageAccessFramework.getUriForDirectoryInRoot(
+          "Android/media",
+        );
+      const result =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(
+          initialUri,
+        );
+      if (result.granted) {
+        await AsyncStorage.setItem(
+          SAF_MEDIA_URI_KEY,
+          result.directoryUri,
+        ).catch(() => {});
+        setSafNeedsPermission(false);
+        const found = await scanSafDir(result.directoryUri);
+        setSafPhotos(found);
+      }
+    } catch {}
+  }, []);
+
+  const dismissSafPermission = useCallback(async () => {
+    setSafNeedsPermission(false);
+    await AsyncStorage.setItem(SAF_DISMISSED_KEY, "1").catch(() => {});
+  }, []);
+
   // ── derived lists ───────────────────────────────────────────────────────────
 
   const deletedIds = useMemo(
@@ -200,16 +338,24 @@ function usePhotosController() {
     [deletedItems],
   );
 
-  const photos = useMemo(
+  const allRaw = useMemo(
     () =>
-      rawPhotos.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
-    [rawPhotos, deletedIds, archivedIds],
+      safPhotos.length === 0
+        ? rawPhotos
+        : [...rawPhotos, ...safPhotos].sort(
+            (a, b) => b.creationTime - a.creationTime,
+          ),
+    [rawPhotos, safPhotos],
+  );
+
+  const photos = useMemo(
+    () => allRaw.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
+    [allRaw, deletedIds, archivedIds],
   );
 
   const archivedPhotos = useMemo(
-    () =>
-      rawPhotos.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
-    [rawPhotos, archivedIds, deletedIds],
+    () => allRaw.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
+    [allRaw, archivedIds, deletedIds],
   );
 
   const favoritePhotos = useMemo(
@@ -334,7 +480,10 @@ function usePhotosController() {
       deletedItems,
       loading,
       hasMore,
-      totalCount,
+      totalCount: totalCount + safPhotos.length,
+      safNeedsPermission,
+      requestSafAccess,
+      dismissSafPermission,
       requestPermission,
       refreshPermission,
       loadMore,
@@ -359,6 +508,10 @@ function usePhotosController() {
       loading,
       hasMore,
       totalCount,
+      safPhotos.length,
+      safNeedsPermission,
+      requestSafAccess,
+      dismissSafPermission,
       requestPermission,
       refreshPermission,
       loadMore,
