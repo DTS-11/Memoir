@@ -66,7 +66,6 @@ export default function Library() {
     setFavoritesBulk,
     moveToRecentlyDeletedBulk,
     archivePhotosBulk,
-    hidePhotosBulk,
     safNeedsPermission,
     requestSafAccess,
     dismissSafPermission,
@@ -286,25 +285,6 @@ export default function Library() {
     archivePhotosBulk,
     cancelSelectMode,
   ]);
-
-  const hideSelected = useCallback(() => {
-    if (!hasSelection) return;
-    Alert.alert(
-      `Hide ${selectedCount} Item${selectedCount === 1 ? "" : "s"}?`,
-      "They'll only be visible in Browse → Hidden, protected by biometrics.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Hide",
-          onPress: () => {
-            hidePhotosBulk(Array.from(selectedIds));
-            cancelSelectMode();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ],
-    );
-  }, [hasSelection, selectedCount, selectedIds, hidePhotosBulk, cancelSelectMode]);
 
   const deleteSelected = useCallback(() => {
     if (!hasSelection) return;
@@ -541,13 +521,6 @@ export default function Library() {
             disabled={!hasSelection}
             color={hasSelection ? "#FF453A" : colors.textTertiary}
           />
-          <ToolbarBtn
-            icon="eye-off-outline"
-            label="Hide"
-            onPress={hideSelected}
-            disabled={!hasSelection}
-            color={colors.text}
-          />
         </GlassView>
       </Animated.View>
 
@@ -669,9 +642,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    minWidth: 52,
+    minWidth: 60,
   },
   toolbarLabel: {
     fontSize: 10,

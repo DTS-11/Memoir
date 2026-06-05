@@ -31,7 +31,8 @@ const FAVORITES_KEY = "memoir.favorites.v1";
 const ARCHIVE_KEY = "memoir.archived.v1";
 const SAF_MEDIA_URI_KEY = "memoir.safMediaUri.v1";
 const SAF_DISMISSED_KEY = "memoir.safDismissed.v1";
-const HIDDEN_KEY = "memoir.hidden.v1";
+// Legacy key from when Archive and Hidden were separate features.
+const LEGACY_HIDDEN_KEY = "memoir.hidden.v1";
 
 // ── SAF scanning helpers (Android only) ────────────────────────────────────────
 
@@ -134,7 +135,6 @@ function usePhotosController() {
   const [deletedItems, setDeletedItems] = useState<RecentlyDeletedPhoto[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -248,23 +248,23 @@ function usePhotosController() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem(ARCHIVE_KEY)
-      .then((v) => {
-        if (!v) return;
-        const parsed = JSON.parse(v) as string[];
-        if (Array.isArray(parsed)) setArchivedIds(new Set(parsed));
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.getItem(HIDDEN_KEY)
-      .then((v) => {
-        if (!v) return;
-        const parsed = JSON.parse(v) as string[];
-        if (Array.isArray(parsed)) setHiddenIds(new Set(parsed));
-      })
-      .catch(() => {});
+    (async () => {
+      try {
+        const [archiveRaw, hiddenRaw] = await Promise.all([
+          AsyncStorage.getItem(ARCHIVE_KEY),
+          AsyncStorage.getItem(LEGACY_HIDDEN_KEY),
+        ]);
+        const archiveIds: string[] = archiveRaw ? JSON.parse(archiveRaw) : [];
+        const hiddenIds: string[] = hiddenRaw ? JSON.parse(hiddenRaw) : [];
+        const merged = Array.from(new Set([...archiveIds, ...hiddenIds]));
+        if (merged.length > 0) {
+          setArchivedIds(new Set(merged));
+          // Persist merged set and clear the legacy hidden key.
+          await AsyncStorage.setItem(ARCHIVE_KEY, JSON.stringify(merged));
+          if (hiddenRaw) await AsyncStorage.removeItem(LEGACY_HIDDEN_KEY);
+        }
+      } catch {}
+    })();
   }, []);
 
   useEffect(() => {
@@ -361,30 +361,13 @@ function usePhotosController() {
   );
 
   const photos = useMemo(
-    () =>
-      allRaw.filter(
-        (p) =>
-          !deletedIds.has(p.id) &&
-          !archivedIds.has(p.id) &&
-          !hiddenIds.has(p.id),
-      ),
-    [allRaw, deletedIds, archivedIds, hiddenIds],
+    () => allRaw.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
+    [allRaw, deletedIds, archivedIds],
   );
 
   const archivedPhotos = useMemo(
-    () =>
-      allRaw.filter(
-        (p) =>
-          archivedIds.has(p.id) &&
-          !deletedIds.has(p.id) &&
-          !hiddenIds.has(p.id),
-      ),
-    [allRaw, archivedIds, deletedIds, hiddenIds],
-  );
-
-  const hiddenPhotos = useMemo(
-    () => allRaw.filter((p) => hiddenIds.has(p.id) && !deletedIds.has(p.id)),
-    [allRaw, hiddenIds, deletedIds],
+    () => allRaw.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
+    [allRaw, archivedIds, deletedIds],
   );
 
   const favoritePhotos = useMemo(
@@ -499,39 +482,12 @@ function usePhotosController() {
     });
   }, []);
 
-  // ── hidden ───────────────────────────────────────────────────────────────────
-
-  const hidePhotosBulk = useCallback((ids: string[]) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      ids.forEach((id) => next.add(id));
-      AsyncStorage.setItem(
-        HIDDEN_KEY,
-        JSON.stringify(Array.from(next)),
-      ).catch(() => {});
-      return next;
-    });
-  }, []);
-
-  const unhidePhoto = useCallback((id: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      AsyncStorage.setItem(
-        HIDDEN_KEY,
-        JSON.stringify(Array.from(next)),
-      ).catch(() => {});
-      return next;
-    });
-  }, []);
-
   return useMemo(
     () => ({
       permission,
       photos,
       archivedPhotos,
       favoritePhotos,
-      hiddenPhotos,
       favoriteIds,
       deletedItems,
       loading,
@@ -553,15 +509,12 @@ function usePhotosController() {
       archivePhoto,
       archivePhotosBulk,
       unarchivePhoto,
-      hidePhotosBulk,
-      unhidePhoto,
     }),
     [
       permission,
       photos,
       archivedPhotos,
       favoritePhotos,
-      hiddenPhotos,
       favoriteIds,
       deletedItems,
       loading,
@@ -584,8 +537,6 @@ function usePhotosController() {
       archivePhoto,
       archivePhotosBulk,
       unarchivePhoto,
-      hidePhotosBulk,
-      unhidePhoto,
     ],
   );
 }

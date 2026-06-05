@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -12,6 +12,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import * as LocalAuthentication from "expo-local-authentication";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePhotos, type Photo } from "../src/hooks/usePhotos";
 import { useTheme } from "../src/theme/ThemeProvider";
@@ -25,8 +26,34 @@ export default function ArchiveScreen() {
   const insets = useSafeAreaInsets();
   const { archivedPhotos, unarchivePhoto, moveToRecentlyDeleted } = usePhotos();
   const { width } = useWindowDimensions();
+  const [unlocked, setUnlocked] = useState(false);
+  const didAttempt = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selecting, setSelecting] = useState(false);
+
+  useEffect(() => {
+    if (didAttempt.current) return;
+    didAttempt.current = true;
+    (async () => {
+      try {
+        const hasHW = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!hasHW || !enrolled) {
+          setUnlocked(true);
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Access Archive",
+          cancelLabel: "Cancel",
+          disableDeviceFallback: false,
+        });
+        if (result.success) setUnlocked(true);
+        else router.back();
+      } catch {
+        setUnlocked(true);
+      }
+    })();
+  }, []);
 
   const tileSize = width / COLS;
 
@@ -141,6 +168,12 @@ export default function ArchiveScreen() {
   );
 
   const hasSelection = selected.size > 0;
+
+  if (!unlocked) {
+    return (
+      <View style={[styles.fill, { backgroundColor: colors.background }]} />
+    );
+  }
 
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>

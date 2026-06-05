@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -33,6 +34,7 @@ import { useEvent } from "expo";
 
 type AssetDetails = Photo & {
   localUri?: string | null;
+  exif?: Record<string, any> | null;
 };
 
 export default function PhotoViewer() {
@@ -71,6 +73,9 @@ export default function PhotoViewer() {
   );
   const [chromeVisible, setChromeVisible] = useState(true);
   const [infoVisible, setInfoVisible] = useState(false);
+  const [slideshowActive, setSlideshowActive] = useState(false);
+  const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const SLIDESHOW_INTERVAL_MS = 3000;
 
   const scale = useSharedValue(1);
   const baseScale = useSharedValue(1);
@@ -152,7 +157,11 @@ export default function PhotoViewer() {
           filename: info.filename,
         };
         setDirectPhoto(next);
-        setDetails({ ...next, localUri: info.localUri });
+        setDetails({
+          ...next,
+          localUri: info.localUri,
+          exif: (info as any).exif ?? null,
+        });
       })
       .catch(() => {});
   }, [data.length, id]);
@@ -172,6 +181,7 @@ export default function PhotoViewer() {
           id: info.id,
           uri: info.uri,
           localUri: info.localUri,
+          exif: (info as any).exif ?? null,
           width: info.width,
           height: info.height,
           creationTime: info.creationTime,
@@ -217,9 +227,45 @@ export default function PhotoViewer() {
     (v: boolean) => {
       setChromeVisible(v);
       chromeOpacity.value = withTiming(v ? 1 : 0, { duration: 150 });
+      if (v && slideshowRef.current) {
+        clearInterval(slideshowRef.current);
+        slideshowRef.current = null;
+        setSlideshowActive(false);
+      }
     },
     [chromeOpacity],
   );
+
+  const stopSlideshow = useCallback(() => {
+    if (slideshowRef.current) clearInterval(slideshowRef.current);
+    slideshowRef.current = null;
+    setSlideshowActive(false);
+  }, []);
+
+  const startSlideshow = useCallback(() => {
+    setSlideshowActive(true);
+    setChrome(false);
+    const id = setInterval(() => {
+      setCurrentIndex((prev) => {
+        const next = prev + 1;
+        if (next >= data.length) {
+          clearInterval(id);
+          slideshowRef.current = null;
+          setSlideshowActive(false);
+          return prev;
+        }
+        listRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, SLIDESHOW_INTERVAL_MS);
+    slideshowRef.current = id;
+  }, [data.length, setChrome]);
+
+  useEffect(() => {
+    return () => {
+      if (slideshowRef.current) clearInterval(slideshowRef.current);
+    };
+  }, []);
 
   const goBack = useCallback(() => {
     videoPlayer.pause();
@@ -501,6 +547,13 @@ export default function PhotoViewer() {
               );
             }}
             onMomentumScrollEnd={onMomentumEnd}
+            onScrollBeginDrag={() => {
+              if (slideshowRef.current) {
+                clearInterval(slideshowRef.current);
+                slideshowRef.current = null;
+                setSlideshowActive(false);
+              }
+            }}
             showsHorizontalScrollIndicator={false}
             windowSize={3}
             maxToRenderPerBatch={2}
@@ -534,6 +587,23 @@ export default function PhotoViewer() {
               {timeTitle}
             </Text>
           </View>
+          {current?.mediaType === "photo" && (
+            <Pressable
+              onPress={slideshowActive ? stopSlideshow : startSlideshow}
+              hitSlop={12}
+              style={styles.iconBtn}
+            >
+              <Ionicons
+                name={
+                  slideshowActive
+                    ? "pause-circle-outline"
+                    : "play-circle-outline"
+                }
+                size={28}
+                color="#FFF"
+              />
+            </Pressable>
+          )}
           <Pressable
             onPress={() => setInfoVisible((v) => !v)}
             hitSlop={12}
@@ -560,7 +630,7 @@ export default function PhotoViewer() {
             />
             <InfoRow
               label="Size"
-              value={`${details?.width || current.width} x ${details?.height || current.height}`}
+              value={`${details?.width || current.width} × ${details?.height || current.height}`}
             />
             <InfoRow
               label="Type"
@@ -574,6 +644,37 @@ export default function PhotoViewer() {
                       : "Unknown"
               }
             />
+            {details?.exif &&
+              (() => {
+                const exif = details.exif;
+                const camera = formatCamera(exif);
+                const lens = [
+                  formatAperture(exif),
+                  formatShutter(exif),
+                  formatISO(exif),
+                  formatFocal(exif),
+                ]
+                  .filter(Boolean)
+                  .join("  ·  ");
+                const gps = formatGPS(exif);
+                return (
+                  <>
+                    {camera ? <InfoRow label="Camera" value={camera} /> : null}
+                    {lens ? <InfoRow label="Lens" value={lens} /> : null}
+                    {gps ? (
+                      <InfoRow
+                        label="Location"
+                        value={gps.text}
+                        onPress={() =>
+                          Linking.openURL(
+                            `geo:${gps.lat},${gps.lng}?q=${gps.lat},${gps.lng}`,
+                          )
+                        }
+                      />
+                    ) : null}
+                  </>
+                );
+              })()}
           </GlassView>
         )}
         {isCurrentPlayable && (
@@ -667,15 +768,41 @@ function ActionBtn({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
+function InfoRow({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  onPress?: () => void;
+}) {
+  const row = (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue} numberOfLines={1} selectable>
+      <Text style={styles.infoValue} numberOfLines={2} selectable={!onPress}>
         {value}
       </Text>
+      {onPress && (
+        <Ionicons
+          name="open-outline"
+          size={13}
+          color="rgba(255,255,255,0.45)"
+        />
+      )}
     </View>
   );
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => pressed && { opacity: 0.65 }}
+      >
+        {row}
+      </Pressable>
+    );
+  }
+  return row;
 }
 
 const styles = StyleSheet.create({
@@ -811,6 +938,77 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
+
+function formatAperture(exif: Record<string, any>): string | null {
+  const v = exif["FNumber"] ?? exif["ApertureValue"];
+  if (v == null) return null;
+  const n = parseFloat(v);
+  if (isNaN(n) || n <= 0) return null;
+  return `ƒ/${n % 1 === 0 ? n.toFixed(0) : n.toFixed(1)}`;
+}
+
+function formatShutter(exif: Record<string, any>): string | null {
+  const v = exif["ExposureTime"];
+  if (v == null) return null;
+  const n = parseFloat(v);
+  if (isNaN(n) || n <= 0) return null;
+  if (n >= 1) return `${n.toFixed(0)}s`;
+  return `1/${Math.round(1 / n)}s`;
+}
+
+function formatISO(exif: Record<string, any>): string | null {
+  const raw = exif["ISOSpeedRatings"] ?? exif["PhotographicSensitivity"];
+  if (raw == null) return null;
+  const n = parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
+  if (isNaN(n)) return null;
+  return `ISO ${n}`;
+}
+
+function formatFocal(exif: Record<string, any>): string | null {
+  const v = exif["FocalLength"] ?? exif["FocalLengthIn35mmFilm"];
+  if (v == null) return null;
+  const n = parseFloat(v);
+  if (isNaN(n) || n <= 0) return null;
+  return `${Math.round(n)}mm`;
+}
+
+function formatCamera(exif: Record<string, any>): string | null {
+  const make = String(exif["Make"] ?? "").trim();
+  const model = String(exif["Model"] ?? "").trim();
+  if (!model && !make) return null;
+  if (!model) return make;
+  if (make && !model.toLowerCase().startsWith(make.toLowerCase())) {
+    return `${make} ${model}`;
+  }
+  return model;
+}
+
+function formatGPS(
+  exif: Record<string, any>,
+): { text: string; lat: number; lng: number } | null {
+  const rawLat = exif["GPSLatitude"];
+  const rawLng = exif["GPSLongitude"];
+  if (rawLat == null || rawLng == null) return null;
+  const latRef = String(exif["GPSLatitudeRef"] ?? "N").toUpperCase();
+  const lngRef = String(exif["GPSLongitudeRef"] ?? "E").toUpperCase();
+  const toDeg = (v: any): number => {
+    if (Array.isArray(v))
+      return parseFloat(v[0]) + parseFloat(v[1]) / 60 + parseFloat(v[2]) / 3600;
+    return parseFloat(v);
+  };
+  const latDeg = toDeg(rawLat);
+  const lngDeg = toDeg(rawLng);
+  if (isNaN(latDeg) || isNaN(lngDeg)) return null;
+  const lat = latDeg * (latRef === "S" ? -1 : 1);
+  const lng = lngDeg * (lngRef === "W" ? -1 : 1);
+  const fmtCoord = (d: number, pos: string, neg: string) =>
+    `${Math.abs(d).toFixed(4)}° ${d >= 0 ? pos : neg}`;
+  return {
+    text: `${fmtCoord(lat, "N", "S")}, ${fmtCoord(lng, "E", "W")}`,
+    lat,
+    lng,
+  };
+}
 
 function mimeTypeFor(filename: string, mediaType: string): string {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";

@@ -93,14 +93,8 @@ type DateFilter = "7d" | "30d" | "year";
 export default function BrowseScreen() {
   const { colors, typography, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const {
-    permission,
-    photos,
-    favoritePhotos,
-    archivedPhotos,
-    hiddenPhotos,
-    deletedItems,
-  } = usePhotos();
+  const { permission, photos, favoritePhotos, archivedPhotos, deletedItems } =
+    usePhotos();
   const enabled = permission === "granted" || permission === "limited";
   const { albums } = useAlbums(enabled);
   const { width } = useWindowDimensions();
@@ -178,7 +172,10 @@ export default function BrowseScreen() {
             String(d.getFullYear()).includes(q);
           if (!textMatch) return false;
         }
-        if (activeMedia.size > 0 && !activeMedia.has(p.mediaType as MediaFilter))
+        if (
+          activeMedia.size > 0 &&
+          !activeMedia.has(p.mediaType as MediaFilter)
+        )
           return false;
         if (
           activeDates.size > 0 &&
@@ -205,7 +202,6 @@ export default function BrowseScreen() {
 
   const openFavorites = useCallback(() => router.push("/favorites"), []);
   const openArchive = useCallback(() => router.push("/archive"), []);
-  const openHidden = useCallback(() => router.push("/hidden"), []);
   const openRecentlyDeleted = useCallback(
     () => router.push("/recently-deleted"),
     [],
@@ -352,15 +348,6 @@ export default function BrowseScreen() {
                 onPress={openArchive}
               />
               <UtilityRow
-                icon="eye-off"
-                iconColor={semantic.hidden}
-                iconBg={semantic.hiddenMuted}
-                label="Hidden"
-                count={hiddenPhotos.length}
-                divider
-                onPress={openHidden}
-              />
-              <UtilityRow
                 icon="trash"
                 iconColor={semantic.delete}
                 iconBg={semantic.deleteMuted}
@@ -445,7 +432,8 @@ export default function BrowseScreen() {
         >
           {(["photo", "video", "audio"] as MediaFilter[]).map((f) => {
             const active = activeMedia.has(f);
-            const label = f === "photo" ? "Photos" : f === "video" ? "Videos" : "Audio";
+            const label =
+              f === "photo" ? "Photos" : f === "video" ? "Videos" : "Audio";
             return (
               <Pressable
                 key={f}
@@ -464,7 +452,9 @@ export default function BrowseScreen() {
                 <Text
                   style={[
                     styles.chipText,
-                    { color: active ? (isDark ? "#000" : "#FFF") : colors.text },
+                    {
+                      color: active ? (isDark ? "#000" : "#FFF") : colors.text,
+                    },
                   ]}
                 >
                   {label}
@@ -501,7 +491,9 @@ export default function BrowseScreen() {
                 <Text
                   style={[
                     styles.chipText,
-                    { color: active ? (isDark ? "#000" : "#FFF") : colors.text },
+                    {
+                      color: active ? (isDark ? "#000" : "#FFF") : colors.text,
+                    },
                   ]}
                 >
                   {label}
