@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -56,6 +56,20 @@ export default function ArchiveScreen() {
   }, []);
 
   const tileSize = width / COLS;
+
+  const keyExtractor = useCallback((item: Photo) => item.id, []);
+  const getItemLayout = useCallback(
+    (_: unknown, index: number) => ({
+      length: tileSize,
+      offset: Math.floor(index / COLS) * tileSize,
+      index,
+    }),
+    [tileSize],
+  );
+  const listPadding = useMemo(
+    () => ({ paddingBottom: insets.bottom + 90 }),
+    [insets.bottom],
+  );
 
   const toggleSelect = useCallback((id: string) => {
     Haptics.selectionAsync();
@@ -244,9 +258,14 @@ export default function ArchiveScreen() {
           <FlatList
             data={archivedPhotos}
             renderItem={renderItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             numColumns={COLS}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+            getItemLayout={getItemLayout}
+            removeClippedSubviews
+            initialNumToRender={18}
+            maxToRenderPerBatch={12}
+            windowSize={5}
+            contentContainerStyle={listPadding}
           />
           <GlassView
             intensity={80}

@@ -209,6 +209,18 @@ export default function BrowseScreen() {
 
   // top padding = safe area + search bar height + small gap
   const scrollTopPad = insets.top + SEARCH_BAR_H + 8;
+  const browseContentStyle = useMemo(
+    () => ({
+      paddingTop: scrollTopPad,
+      paddingBottom: insets.bottom + 100,
+      paddingHorizontal: 16,
+    }),
+    [scrollTopPad, insets.bottom],
+  );
+  const tileStyle = useMemo(
+    () => ({ width: tileSize, height: tileSize, padding: 2 }),
+    [tileSize],
+  );
 
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
@@ -217,11 +229,7 @@ export default function BrowseScreen() {
         keyboardDismissMode="on-drag"
         removeClippedSubviews
         scrollEventThrottle={16}
-        contentContainerStyle={{
-          paddingTop: scrollTopPad,
-          paddingBottom: insets.bottom + 100,
-          paddingHorizontal: 16,
-        }}
+        contentContainerStyle={browseContentStyle}
         showsVerticalScrollIndicator={false}
       >
         {hasActiveFilters ? (
@@ -245,7 +253,7 @@ export default function BrowseScreen() {
                       params: { id: p.id },
                     })
                   }
-                  style={{ width: tileSize, height: tileSize, padding: 2 }}
+                  style={tileStyle}
                 >
                   <View
                     style={[
@@ -276,12 +284,8 @@ export default function BrowseScreen() {
                   nestedScrollEnabled
                   decelerationRate="fast"
                   snapToInterval={memCardW + 12}
-                  contentContainerStyle={{
-                    gap: 12,
-                    paddingRight: 4,
-                    marginBottom: 4,
-                  }}
-                  style={{ marginHorizontal: -16, paddingHorizontal: 16 }}
+                  contentContainerStyle={styles.memScrollContent}
+                  style={styles.memScrollView}
                 >
                   {memories.map((m) => (
                     <MemoryCard key={m.id} memory={m} width={memCardW} />
@@ -427,8 +431,8 @@ export default function BrowseScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 8 }}
-          contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
+          style={styles.chipScrollView}
+          contentContainerStyle={styles.chipScrollContent}
         >
           {(["photo", "video", "audio"] as MediaFilter[]).map((f) => {
             const active = activeMedia.has(f);
@@ -851,6 +855,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 2,
   },
+
+  // memory scroll
+  memScrollView: { marginHorizontal: -16, paddingHorizontal: 16 },
+  memScrollContent: { gap: 12, paddingRight: 4, marginBottom: 4 },
+
+  // chip scroll
+  chipScrollView: { marginTop: 8 },
+  chipScrollContent: { gap: 6, paddingHorizontal: 2 },
 
   // filter chips
   chip: {

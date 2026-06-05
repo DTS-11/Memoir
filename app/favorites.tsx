@@ -1,5 +1,11 @@
-import { useCallback, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  type LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -20,10 +26,26 @@ export default function FavoritesScreen() {
   const listRef = useRef<FlashListRef<GridItem> | null>(null);
   const [tileWidth, setTileWidth] = useState(0);
 
-  const items = buildGrid(favoritePhotos, "all");
+  const items = useMemo(() => buildGrid(favoritePhotos, "all"), [favoritePhotos]);
 
   const onPressPhoto = useCallback((p: Photo) => {
     router.push({ pathname: "/photo/[id]", params: { id: p.id } });
+  }, []);
+
+  const overrideItemLayout = useCallback(
+    (layout: { span?: number }, item: GridItem) => {
+      if (item.type === "header") layout.span = COLS;
+    },
+    [],
+  );
+
+  const contentContainerStyle = useMemo(
+    () => ({ paddingBottom: insets.bottom + 20 }),
+    [insets.bottom],
+  );
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setTileWidth(e.nativeEvent.layout.width / COLS);
   }, []);
 
   const renderItem = useCallback(
@@ -52,7 +74,7 @@ export default function FavoritesScreen() {
   return (
     <View
       style={[styles.fill, { backgroundColor: colors.background }]}
-      onLayout={(e) => setTileWidth(e.nativeEvent.layout.width / COLS)}
+      onLayout={onLayout}
     >
       {/* Header */}
       <View
@@ -104,11 +126,9 @@ export default function FavoritesScreen() {
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           numColumns={COLS}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          contentContainerStyle={contentContainerStyle}
           getItemType={(item) => item.type}
-          overrideItemLayout={(layout, item) => {
-            if (item.type === "header") layout.span = COLS;
-          }}
+          overrideItemLayout={overrideItemLayout}
         />
       )}
     </View>

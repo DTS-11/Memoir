@@ -76,6 +76,8 @@ export default function PhotoViewer() {
   const [slideshowActive, setSlideshowActive] = useState(false);
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const SLIDESHOW_INTERVAL_MS = 3000;
+  const chromeVisibleRef = useRef(chromeVisible);
+  chromeVisibleRef.current = chromeVisible;
 
   const scale = useSharedValue(1);
   const baseScale = useSharedValue(1);
@@ -109,6 +111,8 @@ export default function PhotoViewer() {
   });
 
   const current = data[currentIndex] ?? fallbackPhoto ?? directPhoto;
+  const currentRef = useRef(current);
+  currentRef.current = current;
   const displayUri = details?.localUri || current?.uri;
   const isCurrentVideo = current?.mediaType === "video";
   const isCurrentAudio = current?.mediaType === "audio";
@@ -167,14 +171,15 @@ export default function PhotoViewer() {
   }, [data.length, id]);
 
   useEffect(() => {
-    if (!current?.id) return;
+    const cur = currentRef.current;
+    if (!cur?.id) return;
     resetZoom();
     setInfoVisible(false);
-    if (current.id.startsWith("saf:")) {
-      setDetails(current);
+    if (cur.id.startsWith("saf:")) {
+      setDetails(cur);
       return;
     }
-    MediaLibrary.getAssetInfoAsync(current.id)
+    MediaLibrary.getAssetInfoAsync(cur.id)
       .then((info) => {
         if (!info) return;
         setDetails({
@@ -190,8 +195,9 @@ export default function PhotoViewer() {
           filename: info.filename,
         });
       })
-      .catch(() => setDetails(current));
-  }, [current, resetZoom]);
+      .catch(() => setDetails(cur));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, resetZoom]);
 
   useEffect(() => {
     if (
@@ -277,9 +283,9 @@ export default function PhotoViewer() {
       Gesture.Tap()
         .numberOfTaps(1)
         .onEnd(() => {
-          runOnJS(setChrome)(!chromeVisible);
+          runOnJS(setChrome)(!chromeVisibleRef.current);
         }),
-    [chromeVisible, setChrome],
+    [setChrome],
   );
 
   const doubleTap = useMemo(
@@ -547,13 +553,7 @@ export default function PhotoViewer() {
               );
             }}
             onMomentumScrollEnd={onMomentumEnd}
-            onScrollBeginDrag={() => {
-              if (slideshowRef.current) {
-                clearInterval(slideshowRef.current);
-                slideshowRef.current = null;
-                setSlideshowActive(false);
-              }
-            }}
+            onScrollBeginDrag={stopSlideshow}
             showsHorizontalScrollIndicator={false}
             windowSize={3}
             maxToRenderPerBatch={2}
