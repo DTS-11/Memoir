@@ -60,6 +60,8 @@ export const semantic = {
   archiveMuted: "rgba(255,149,0,0.14)",
   favorite: "#FF2D55",
   favoriteMuted: "rgba(255,45,85,0.14)",
+  hidden: "#8E8E93",
+  hiddenMuted: "rgba(142,142,147,0.14)",
 } as const;
 
 export const radii = {

@@ -18,7 +18,8 @@
       "icon": "./assets/memoir_logo.png",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Memoir needs access to your photo library to display your photos.",
-        "NSPhotoLibraryAddUsageDescription": "Memoir needs permission to save photos to your library."
+        "NSPhotoLibraryAddUsageDescription": "Memoir needs permission to save photos to your library.",
+        "NSFaceIDUsageDescription": "Memoir uses Face ID to unlock Hidden photos."
       }
     },
     "android": {
@@ -53,7 +54,8 @@
       "expo-image",
       "expo-font",
       "expo-video",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-local-authentication"
     ],
     "experiments": {
       "typedRoutes": true

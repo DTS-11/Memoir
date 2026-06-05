@@ -84,18 +84,55 @@ function buildMemories(photos: Photo[]): Memory[] {
 // ── main screen ───────────────────────────────────────────────────────────────
 
 // Height of the floating search bar (excluding safe-area top).
-const SEARCH_BAR_H = 58;
+// 38 input + 10 top pad + 10 bottom pad + 8 gap + 34 chips row = 100
+const SEARCH_BAR_H = 100;
+
+type MediaFilter = "photo" | "video" | "audio";
+type DateFilter = "7d" | "30d" | "year";
 
 export default function BrowseScreen() {
   const { colors, typography, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { permission, photos, favoritePhotos, archivedPhotos, deletedItems } =
-    usePhotos();
+  const {
+    permission,
+    photos,
+    favoritePhotos,
+    archivedPhotos,
+    hiddenPhotos,
+    deletedItems,
+  } = usePhotos();
   const enabled = permission === "granted" || permission === "limited";
   const { albums } = useAlbums(enabled);
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState("");
   const [albumsExpanded, setAlbumsExpanded] = useState(false);
+  const [activeMedia, setActiveMedia] = useState<Set<MediaFilter>>(new Set());
+  const [activeDates, setActiveDates] = useState<Set<DateFilter>>(new Set());
+
+  const toggleMedia = useCallback((f: MediaFilter) => {
+    setActiveMedia((prev) => {
+      const next = new Set(prev);
+      next.has(f) ? next.delete(f) : next.add(f);
+      return next;
+    });
+  }, []);
+
+  const toggleDate = useCallback((f: DateFilter) => {
+    setActiveDates((prev) => {
+      const next = new Set(prev);
+      next.has(f) ? next.delete(f) : next.add(f);
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setActiveMedia(new Set());
+    setActiveDates(new Set());
+  }, []);
+
+  const hasActiveFilters =
+    query.length > 0 || activeMedia.size > 0 || activeDates.size > 0;
 
   const toggleAlbums = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -120,21 +157,38 @@ export default function BrowseScreen() {
   );
 
   const filtered = useMemo(() => {
+    if (!hasActiveFilters) return [] as Photo[];
     const q = query.trim().toLowerCase();
-    if (!q) return [] as Photo[];
+    const now = Date.now();
+    const dateCutoff: Record<DateFilter, number> = {
+      "7d": now - 7 * 86_400_000,
+      "30d": now - 30 * 86_400_000,
+      year: new Date(new Date().getFullYear(), 0, 1).getTime(),
+    };
     return photos
       .filter((p) => {
-        if (p.filename.toLowerCase().includes(q)) return true;
-        const d = new Date(p.creationTime);
-        const monthName = d
-          .toLocaleString(undefined, { month: "long" })
-          .toLowerCase();
-        if (monthName.includes(q)) return true;
-        if (String(d.getFullYear()).includes(q)) return true;
-        return false;
+        if (q) {
+          const d = new Date(p.creationTime);
+          const monthName = d
+            .toLocaleString(undefined, { month: "long" })
+            .toLowerCase();
+          const textMatch =
+            p.filename.toLowerCase().includes(q) ||
+            monthName.includes(q) ||
+            String(d.getFullYear()).includes(q);
+          if (!textMatch) return false;
+        }
+        if (activeMedia.size > 0 && !activeMedia.has(p.mediaType as MediaFilter))
+          return false;
+        if (
+          activeDates.size > 0 &&
+          !Array.from(activeDates).some((f) => p.creationTime >= dateCutoff[f])
+        )
+          return false;
+        return true;
       })
-      .slice(0, 60);
-  }, [photos, query]);
+      .slice(0, 300);
+  }, [photos, query, activeMedia, activeDates, hasActiveFilters]);
 
   useEffect(() => {
     return addTabScrollToTopListener("albums", () => {
@@ -151,6 +205,7 @@ export default function BrowseScreen() {
 
   const openFavorites = useCallback(() => router.push("/favorites"), []);
   const openArchive = useCallback(() => router.push("/archive"), []);
+  const openHidden = useCallback(() => router.push("/hidden"), []);
   const openRecentlyDeleted = useCallback(
     () => router.push("/recently-deleted"),
     [],
@@ -173,7 +228,7 @@ export default function BrowseScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {query.length > 0 ? (
+        {hasActiveFilters ? (
           /* ── search results ─────────────────────────────────────────────── */
           <>
             <Text
@@ -297,6 +352,15 @@ export default function BrowseScreen() {
                 onPress={openArchive}
               />
               <UtilityRow
+                icon="eye-off"
+                iconColor={semantic.hidden}
+                iconBg={semantic.hiddenMuted}
+                label="Hidden"
+                count={hiddenPhotos.length}
+                divider
+                onPress={openHidden}
+              />
+              <UtilityRow
                 icon="trash"
                 iconColor={semantic.delete}
                 iconBg={semantic.deleteMuted}
@@ -363,8 +427,8 @@ export default function BrowseScreen() {
             style={[styles.searchInput, { color: colors.text }]}
             returnKeyType="search"
           />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery("")} hitSlop={10}>
+          {hasActiveFilters && (
+            <Pressable onPress={clearFilters} hitSlop={10}>
               <Ionicons
                 name="close-circle"
                 size={17}
@@ -373,6 +437,79 @@ export default function BrowseScreen() {
             </Pressable>
           )}
         </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: 8 }}
+          contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
+        >
+          {(["photo", "video", "audio"] as MediaFilter[]).map((f) => {
+            const active = activeMedia.has(f);
+            const label = f === "photo" ? "Photos" : f === "video" ? "Videos" : "Audio";
+            return (
+              <Pressable
+                key={f}
+                onPress={() => toggleMedia(f)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: active
+                      ? colors.accent
+                      : isDark
+                        ? "rgba(118,118,128,0.24)"
+                        : "rgba(118,118,128,0.12)",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    { color: active ? (isDark ? "#000" : "#FFF") : colors.text },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <View
+            style={[styles.chipDivider, { backgroundColor: colors.separator }]}
+          />
+          {(
+            [
+              ["7d", "Last 7 Days"],
+              ["30d", "Last 30 Days"],
+              ["year", "This Year"],
+            ] as [DateFilter, string][]
+          ).map(([f, label]) => {
+            const active = activeDates.has(f);
+            return (
+              <Pressable
+                key={f}
+                onPress={() => toggleDate(f)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: active
+                      ? colors.accent
+                      : isDark
+                        ? "rgba(118,118,128,0.24)"
+                        : "rgba(118,118,128,0.12)",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    { color: active ? (isDark ? "#000" : "#FFF") : colors.text },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </GlassView>
     </View>
   );
@@ -721,6 +858,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     marginTop: 2,
+  },
+
+  // filter chips
+  chip: {
+    height: 30,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    justifyContent: "center" as const,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+  },
+  chipDivider: {
+    width: 1,
+    height: 20,
+    alignSelf: "center" as const,
+    marginHorizontal: 4,
   },
 
   // search results
