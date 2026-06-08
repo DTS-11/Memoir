@@ -108,8 +108,8 @@ function PhotoThumbImpl({
           <View style={[styles.selectionRing, { borderRadius: radius }]} />
         )}
 
-        {/* Duration badge — videos and audio */}
-        {(isVideo || isAudio) && (
+        {/* Duration badge — videos and audio (hide when duration unknown) */}
+        {(isVideo || isAudio) && photo.duration > 0 && (
           <View style={styles.durationBadge}>
             {isAudio && (
               <Ionicons

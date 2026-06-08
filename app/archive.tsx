@@ -24,7 +24,8 @@ const COLS = 3;
 export default function ArchiveScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { archivedPhotos, unarchivePhoto, moveToRecentlyDeleted } = usePhotos();
+  const { archivedPhotos, unarchivePhoto, moveToRecentlyDeletedBulk } =
+    usePhotos();
   const { width } = useWindowDimensions();
   const [unlocked, setUnlocked] = useState(false);
   const didAttempt = useRef(false);
@@ -117,19 +118,18 @@ export default function ArchiveScreen() {
           text: "Delete Forever",
           style: "destructive",
           onPress: async () => {
-            // Move to recently deleted first so user can still recover
             const toDelete = archivedPhotos.filter((p) => selected.has(p.id));
-            toDelete.forEach((p) => {
-              unarchivePhoto(p.id);
-              moveToRecentlyDeleted(p);
-            });
+            // unarchivePhoto uses a functional updater so forEach is safe here
+            toDelete.forEach((p) => unarchivePhoto(p.id));
+            // single bulk call avoids stale-closure issues
+            moveToRecentlyDeletedBulk(toDelete);
             setSelected(new Set());
             setSelecting(false);
           },
         },
       ],
     );
-  }, [selected, archivedPhotos, unarchivePhoto, moveToRecentlyDeleted]);
+  }, [selected, archivedPhotos, unarchivePhoto, moveToRecentlyDeletedBulk]);
 
   const renderItem = useCallback(
     ({ item }: { item: Photo }) => {

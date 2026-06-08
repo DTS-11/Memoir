@@ -37,8 +37,11 @@ const LEGACY_HIDDEN_KEY = "memoir.hidden.v1";
 // ── SAF scanning helpers (Android only) ────────────────────────────────────────
 
 const MEDIA_EXTS =
-  /\.(jpe?g|png|gif|heic|heif|webp|tiff?|bmp|mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
+  /\.(jpe?g|png|gif|heic|heif|tiff?|bmp|mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
 const VIDEO_EXTS = /\.(mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
+// Directories that contain no user photos/videos worth indexing
+const SKIP_DIR_NAMES =
+  /sticker|document|audio|voice.?note|profile.?photo|status|wallpaper/i;
 
 function getSafFilename(uri: string): string {
   const encoded = uri.split("%2F").pop() ?? uri.split("/").pop() ?? "";
@@ -91,9 +94,10 @@ async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
     return [];
   }
   const photos: Photo[] = [];
+  const subDirs: string[] = [];
   for (const entry of entries) {
     const filename = getSafFilename(entry);
-    if (!filename) continue;
+    if (!filename || filename.startsWith(".")) continue;
     if (MEDIA_EXTS.test(filename)) {
       photos.push({
         id: `saf:${entry}`,
@@ -105,11 +109,15 @@ async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
         mediaType: VIDEO_EXTS.test(filename) ? "video" : "photo",
         filename,
       });
-    } else if (!filename.startsWith(".")) {
-      const sub = await scanSafDir(entry, depth + 1);
-      photos.push(...sub);
+    } else if (!SKIP_DIR_NAMES.test(filename)) {
+      subDirs.push(entry);
     }
   }
+  // Scan subdirectories in parallel instead of sequentially
+  const subResults = await Promise.all(
+    subDirs.map((dir) => scanSafDir(dir, depth + 1)),
+  );
+  for (const sub of subResults) photos.push(...sub);
   return photos;
 }
 
@@ -232,7 +240,20 @@ function usePhotosController() {
       .then((v) => {
         if (!v) return;
         const parsed = JSON.parse(v) as RecentlyDeletedPhoto[];
-        if (Array.isArray(parsed)) setDeletedItems(parsed);
+        if (!Array.isArray(parsed)) return;
+        // Auto-purge items older than 30 days (they're gone from MediaLibrary anyway)
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const fresh = parsed.filter(
+          (item) => now - item.deletedAt < THIRTY_DAYS_MS,
+        );
+        setDeletedItems(fresh);
+        if (fresh.length !== parsed.length) {
+          AsyncStorage.setItem(
+            RECENTLY_DELETED_KEY,
+            JSON.stringify(fresh),
+          ).catch(() => {});
+        }
       })
       .catch(() => {});
   }, []);
@@ -350,15 +371,15 @@ function usePhotosController() {
     [deletedItems],
   );
 
-  const allRaw = useMemo(
-    () =>
-      safPhotos.length === 0
-        ? rawPhotos
-        : [...rawPhotos, ...safPhotos].sort(
-            (a, b) => b.creationTime - a.creationTime,
-          ),
-    [rawPhotos, safPhotos],
-  );
+  const allRaw = useMemo(() => {
+    if (safPhotos.length === 0) return rawPhotos;
+    // Drop SAF entries that are already indexed by MediaLibrary (same URI)
+    const mlUris = new Set(rawPhotos.map((p) => p.uri));
+    const uniqueSaf = safPhotos.filter((p) => !mlUris.has(p.uri));
+    return [...rawPhotos, ...uniqueSaf].sort(
+      (a, b) => b.creationTime - a.creationTime,
+    );
+  }, [rawPhotos, safPhotos]);
 
   const photos = useMemo(
     () => allRaw.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
@@ -387,18 +408,18 @@ function usePhotosController() {
     [deletedItems, persistDeletedItems],
   );
 
+  // Accepts Photo objects directly so callers don't need items to be in `photos`
+  // (e.g. archive items are excluded from `photos`).
   const moveToRecentlyDeletedBulk = useCallback(
-    (photoIds: string[]) => {
-      const idSet = new Set(photoIds);
-      const toAdd = photos
-        .filter((p) => idSet.has(p.id))
-        .map((p) => ({ ...p, deletedAt: Date.now() }));
+    (photoList: Photo[]) => {
+      const idSet = new Set(photoList.map((p) => p.id));
+      const toAdd = photoList.map((p) => ({ ...p, deletedAt: Date.now() }));
       persistDeletedItems([
         ...toAdd,
         ...deletedItems.filter((item) => !idSet.has(item.id)),
       ]);
     },
-    [photos, deletedItems, persistDeletedItems],
+    [deletedItems, persistDeletedItems],
   );
 
   const restoreDeletedPhoto = useCallback(
@@ -408,11 +429,45 @@ function usePhotosController() {
     [deletedItems, persistDeletedItems],
   );
 
+  // Atomically restores multiple items — avoids stale-closure issues when
+  // calling restoreDeletedPhoto in a loop.
+  const restoreDeletedPhotoBulk = useCallback(
+    (ids: string[]) => {
+      const idSet = new Set(ids);
+      persistDeletedItems(deletedItems.filter((item) => !idSet.has(item.id)));
+    },
+    [deletedItems, persistDeletedItems],
+  );
+
   const deletePhotoForever = useCallback(
     async (id: string) => {
-      await MediaLibrary.deleteAssetsAsync([id]);
+      if (id.startsWith("saf:")) {
+        setSafPhotos((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        await MediaLibrary.deleteAssetsAsync([id]).catch(() => {});
+        setRawPhotos((prev) => prev.filter((p) => p.id !== id));
+      }
       persistDeletedItems(deletedItems.filter((item) => item.id !== id));
-      setRawPhotos((prev) => prev.filter((p) => p.id !== id));
+    },
+    [deletedItems, persistDeletedItems],
+  );
+
+  // Atomically deletes multiple items forever — avoids stale-closure issues
+  // when calling deletePhotoForever in a loop.
+  const deleteForeverBulk = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      const mediaIds = ids.filter((id) => !id.startsWith("saf:"));
+      const safIds = ids.filter((id) => id.startsWith("saf:"));
+      if (mediaIds.length > 0) {
+        await MediaLibrary.deleteAssetsAsync(mediaIds).catch(() => {});
+        setRawPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
+      }
+      if (safIds.length > 0) {
+        setSafPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
+      }
+      persistDeletedItems(deletedItems.filter((item) => !idSet.has(item.id)));
     },
     [deletedItems, persistDeletedItems],
   );
@@ -503,7 +558,9 @@ function usePhotosController() {
       moveToRecentlyDeleted,
       moveToRecentlyDeletedBulk,
       restoreDeletedPhoto,
+      restoreDeletedPhotoBulk,
       deletePhotoForever,
+      deleteForeverBulk,
       toggleFavorite,
       setFavoritesBulk,
       archivePhoto,
@@ -531,7 +588,9 @@ function usePhotosController() {
       moveToRecentlyDeleted,
       moveToRecentlyDeletedBulk,
       restoreDeletedPhoto,
+      restoreDeletedPhotoBulk,
       deletePhotoForever,
+      deleteForeverBulk,
       toggleFavorite,
       setFavoritesBulk,
       archivePhoto,

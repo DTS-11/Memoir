@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -119,10 +121,11 @@ export default function PhotoViewer() {
   const isCurrentPlayable = isCurrentVideo || isCurrentAudio;
 
   const [videoDuration, setVideoDuration] = useState(0);
+  // Only check duration when status changes — avoids running 4×/s on every timeUpdate
   useEffect(() => {
     const d = videoPlayer.duration;
     if (d > 0) setVideoDuration(d);
-  }, [videoStatus, videoCurrentTime, videoPlayer]);
+  }, [videoStatus, videoPlayer]);
 
   const resetZoom = useCallback(() => {
     scale.value = withTiming(1, { duration: 140 });
@@ -248,13 +251,16 @@ export default function PhotoViewer() {
     setSlideshowActive(false);
   }, []);
 
+  const dataLengthRef = useRef(data.length);
+  dataLengthRef.current = data.length;
+
   const startSlideshow = useCallback(() => {
     setSlideshowActive(true);
     setChrome(false);
     const id = setInterval(() => {
       setCurrentIndex((prev) => {
         const next = prev + 1;
-        if (next >= data.length) {
+        if (next >= dataLengthRef.current) {
           clearInterval(id);
           slideshowRef.current = null;
           setSlideshowActive(false);
@@ -265,7 +271,7 @@ export default function PhotoViewer() {
       });
     }, SLIDESHOW_INTERVAL_MS);
     slideshowRef.current = id;
-  }, [data.length, setChrome]);
+  }, [setChrome]);
 
   useEffect(() => {
     return () => {
@@ -393,19 +399,19 @@ export default function PhotoViewer() {
     if (!current) return;
     Haptics.selectionAsync();
 
-    let fileUri = details?.localUri ?? null;
-    if (!fileUri) {
-      if (current.id.startsWith("saf:")) {
-        fileUri = current.uri;
-      } else {
-        try {
-          const info = await MediaLibrary.getAssetInfoAsync(current.id);
-          fileUri = info?.localUri ?? null;
-        } catch {}
-      }
+    let srcUri: string | null = null;
+    if (current.id.startsWith("saf:")) {
+      srcUri = current.uri;
+    } else if (details?.localUri) {
+      srcUri = details.localUri;
+    } else {
+      const info = await MediaLibrary.getAssetInfoAsync(current.id).catch(
+        () => null,
+      );
+      srcUri = info?.localUri ?? current.uri ?? null;
     }
 
-    if (!fileUri) {
+    if (!srcUri) {
       Alert.alert(
         "Unable to Share",
         "Could not resolve a local file path for this item.",
@@ -413,10 +419,22 @@ export default function PhotoViewer() {
       return;
     }
 
-    await Sharing.shareAsync(fileUri, {
-      mimeType: mimeTypeFor(current.filename, current.mediaType as string),
-      dialogTitle: current.filename,
-    });
+    try {
+      let shareUri = srcUri;
+      // expo-sharing on Android requires file:// — copy content:// to cache first
+      if (Platform.OS === "android" && srcUri.startsWith("content://")) {
+        const ext = current.filename.split(".").pop() ?? "jpg";
+        const dest = `${FileSystem.cacheDirectory}share_${Date.now()}.${ext}`;
+        await FileSystem.copyAsync({ from: srcUri, to: dest });
+        shareUri = dest;
+      }
+      await Sharing.shareAsync(shareUri, {
+        mimeType: mimeTypeFor(current.filename, current.mediaType as string),
+        dialogTitle: current.filename,
+      });
+    } catch {
+      Alert.alert("Unable to Share", "Could not share this item.");
+    }
   }, [current, details]);
 
   const handleToggleFavorite = useCallback(() => {

@@ -17,11 +17,11 @@ import { usePhotos, type RecentlyDeletedPhoto } from "../src/hooks/usePhotos";
 import { useTheme } from "../src/theme/ThemeProvider";
 import { GlassView } from "../src/components/GlassView";
 
-function daysAgo(timestamp: number): string {
-  const days = Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24));
-  if (days === 0) return "Today";
-  if (days === 1) return "1 day";
-  return `${days} days`;
+function daysRemaining(deletedAt: number): string {
+  const elapsed = (Date.now() - deletedAt) / (1000 * 60 * 60 * 24);
+  const left = Math.max(0, Math.ceil(30 - elapsed));
+  if (left <= 1) return "< 1 day";
+  return `${left} days`;
 }
 
 const COLS = 3;
@@ -29,7 +29,8 @@ const COLS = 3;
 export default function RecentlyDeletedScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { deletedItems, restoreDeletedPhoto, deletePhotoForever } = usePhotos();
+  const { deletedItems, restoreDeletedPhotoBulk, deleteForeverBulk } =
+    usePhotos();
   const { width } = useWindowDimensions();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selecting, setSelecting] = useState(false);
@@ -78,12 +79,11 @@ export default function RecentlyDeletedScreen() {
   }, [deletedItems]);
 
   const restoreSelected = useCallback(() => {
-    const ids = Array.from(selected);
-    ids.forEach((id) => restoreDeletedPhoto(id));
+    restoreDeletedPhotoBulk(Array.from(selected));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSelected(new Set());
     setSelecting(false);
-  }, [selected, restoreDeletedPhoto]);
+  }, [selected, restoreDeletedPhotoBulk]);
 
   const deleteSelectedForever = useCallback(() => {
     const count = selected.size;
@@ -96,16 +96,14 @@ export default function RecentlyDeletedScreen() {
           text: "Delete Forever",
           style: "destructive",
           onPress: async () => {
-            for (const id of Array.from(selected)) {
-              await deletePhotoForever(id);
-            }
+            await deleteForeverBulk(Array.from(selected));
             setSelected(new Set());
             setSelecting(false);
           },
         },
       ],
     );
-  }, [selected, deletePhotoForever]);
+  }, [selected, deleteForeverBulk]);
 
   const recoverAll = useCallback(() => {
     if (deletedItems.length === 0) return;
@@ -117,13 +115,13 @@ export default function RecentlyDeletedScreen() {
         {
           text: "Recover All",
           onPress: () => {
-            deletedItems.forEach((item) => restoreDeletedPhoto(item.id));
+            restoreDeletedPhotoBulk(deletedItems.map((item) => item.id));
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           },
         },
       ],
     );
-  }, [deletedItems, restoreDeletedPhoto]);
+  }, [deletedItems, restoreDeletedPhotoBulk]);
 
   const deleteAll = useCallback(() => {
     if (deletedItems.length === 0) return;
@@ -136,14 +134,12 @@ export default function RecentlyDeletedScreen() {
           text: "Delete All",
           style: "destructive",
           onPress: async () => {
-            for (const item of [...deletedItems]) {
-              await deletePhotoForever(item.id);
-            }
+            await deleteForeverBulk(deletedItems.map((item) => item.id));
           },
         },
       ],
     );
-  }, [deletedItems, deletePhotoForever]);
+  }, [deletedItems, deleteForeverBulk]);
 
   const renderItem = useCallback(
     ({ item }: { item: RecentlyDeletedPhoto }) => {
@@ -180,7 +176,7 @@ export default function RecentlyDeletedScreen() {
             />
           )}
           <View style={styles.tileGradient} />
-          <Text style={styles.tileAge}>{daysAgo(item.deletedAt)}</Text>
+          <Text style={styles.tileAge}>{daysRemaining(item.deletedAt)}</Text>
           {selecting && (
             <View
               style={[
@@ -285,7 +281,7 @@ export default function RecentlyDeletedScreen() {
               },
             ]}
           >
-            Photos you delete will appear here so you can restore them.
+            Items are automatically removed after 30 days.
           </Text>
         </View>
       ) : (

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-worklets";
@@ -230,18 +231,43 @@ export default function Library() {
   const shareSelected = useCallback(async () => {
     if (!hasSelection) return;
     const selected = photos.filter((p) => selectedIds.has(p.id));
-    const infos = await Promise.all(
-      selected.map((p) =>
-        p.id.startsWith("saf:")
-          ? Promise.resolve({ localUri: p.uri } as { localUri: string })
-          : MediaLibrary.getAssetInfoAsync(p.id).catch(() => null),
-      ),
-    );
-    const uri = infos[0]?.localUri ?? selected[0]?.uri;
-    if (uri) {
-      await Sharing.shareAsync(uri, { dialogTitle: selected[0]?.filename });
+    const item = selected[0];
+    if (!item) {
+      cancelSelectMode();
+      return;
+    }
+
+    let srcUri: string | null = null;
+    if (item.id.startsWith("saf:")) {
+      srcUri = item.uri;
     } else {
-      Alert.alert("Unable to Share", "Could not resolve a local file path.");
+      const info = await MediaLibrary.getAssetInfoAsync(item.id).catch(
+        () => null,
+      );
+      srcUri = info?.localUri ?? item.uri ?? null;
+    }
+
+    if (!srcUri) {
+      Alert.alert(
+        "Unable to Share",
+        "Could not resolve local file path for this item.",
+      );
+      cancelSelectMode();
+      return;
+    }
+
+    try {
+      let shareUri = srcUri;
+      // Android expo-sharing requires a file:// URI; content:// must be copied to cache first
+      if (Platform.OS === "android" && srcUri.startsWith("content://")) {
+        const ext = item.filename.split(".").pop() ?? "mp4";
+        const dest = `${FileSystem.cacheDirectory}share_${Date.now()}.${ext}`;
+        await FileSystem.copyAsync({ from: srcUri, to: dest });
+        shareUri = dest;
+      }
+      await Sharing.shareAsync(shareUri, { dialogTitle: item.filename });
+    } catch {
+      Alert.alert("Unable to Share", "Could not share this item.");
     }
     cancelSelectMode();
   }, [hasSelection, photos, selectedIds, cancelSelectMode]);
@@ -297,7 +323,9 @@ export default function Library() {
           text: "Delete",
           style: "destructive",
           onPress: () => {
-            moveToRecentlyDeletedBulk(Array.from(selectedIds));
+            moveToRecentlyDeletedBulk(
+              photos.filter((p) => selectedIds.has(p.id)),
+            );
             cancelSelectMode();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
@@ -308,6 +336,7 @@ export default function Library() {
     hasSelection,
     selectedCount,
     selectedIds,
+    photos,
     moveToRecentlyDeletedBulk,
     cancelSelectMode,
   ]);

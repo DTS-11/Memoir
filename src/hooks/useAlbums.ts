@@ -67,9 +67,7 @@ export function useAlbums(enabled: boolean) {
       const rawAlbums = await MediaLibrary.getAlbumsAsync({
         includeSmartAlbums: false,
       });
-      const previews = await Promise.all(
-        rawAlbums.slice(0, 24).map(previewForAlbum),
-      );
+      const previews = await Promise.all(rawAlbums.map(previewForAlbum));
       setAlbums(previews.filter((a) => a.count > 0));
 
       const [videos, recents] = await Promise.all([

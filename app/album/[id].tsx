@@ -20,6 +20,7 @@ export default function AlbumScreen() {
   const [endCursor, setEndCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   const loadMore = useCallback(async () => {
     if (!id || loadingMore || !hasMore) return;
@@ -45,8 +46,11 @@ export default function AlbumScreen() {
       setPhotos((prev) => (endCursor ? [...prev, ...mapped] : mapped));
       setEndCursor(res.endCursor);
       setHasMore(res.hasNextPage);
+    } catch {
+      // keep whatever we already have
     } finally {
       setLoadingMore(false);
+      setInitialLoaded(true);
     }
   }, [id, endCursor, hasMore, loadingMore]);
 
@@ -75,7 +79,10 @@ export default function AlbumScreen() {
         />
       ) : (
         <View style={[styles.fill, { paddingTop: headerHeight }]}>
-          <EmptyState icon="images-outline" title="Loading album..." />
+          <EmptyState
+            icon="images-outline"
+            title={initialLoaded ? "No photos in this album" : "Loading album…"}
+          />
         </View>
       )}
 
