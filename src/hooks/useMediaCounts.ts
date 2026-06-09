@@ -80,34 +80,23 @@ export function useMediaCounts(enabled: boolean): Record<string, number> {
 
     async function run() {
       // Load cached counts immediately so the UI isn't blank while scanning.
-      const raw = await AsyncStorage.getItem(COUNTS_CACHE_KEY).catch(
-        () => null,
-      );
+      const raw = await AsyncStorage.getItem(COUNTS_CACHE_KEY).catch(() => null);
       const cache: Cache | null = raw ? JSON.parse(raw) : null;
       if (cache) setCounts(cache.counts);
 
       // Cheap check: how many total assets are there right now?
-      const headRes = await MediaLibrary.getAssetsAsync({ first: 1 }).catch(
-        () => null,
-      );
+      const headRes = await MediaLibrary.getAssetsAsync({ first: 1 }).catch(() => null);
       const currentTotal = headRes?.totalCount ?? 0;
 
       // If the cache is fresh (< 1 h) and total count unchanged, we're done.
       const cacheAge = Date.now() - (cache?.ts ?? 0);
-      if (
-        cache &&
-        cache.totalCount === currentTotal &&
-        cacheAge < 60 * 60 * 1000
-      ) {
+      if (cache && cache.totalCount === currentTotal && cacheAge < 60 * 60 * 1000) {
         return;
       }
 
       // Get cheap ML-queryable counts first — emit them straight away.
       const mlEntries = await Promise.all(
-        Object.entries(ML_QUERYABLE).map(async ([key, query]) => [
-          key,
-          await query(),
-        ]),
+        Object.entries(ML_QUERYABLE).map(async ([key, query]) => [key, await query()]),
       );
       const mlCounts = Object.fromEntries(mlEntries) as Record<string, number>;
       setCounts((prev) => ({ ...prev, ...mlCounts }));

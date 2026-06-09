@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-worklets";
@@ -50,8 +50,7 @@ const FAMILY_KEY = "memoir.layoutFamily.v1";
 const SELECT_BAR_SPRING = { damping: 22, stiffness: 280, mass: 0.8 } as const;
 const ZOOM_SPRING = { damping: 18, stiffness: 300, mass: 0.7 } as const;
 
-// Pinch scale thresholds — intentionally low for effortless trigger
-const PINCH_IN_THRESHOLD = 1.08;
+const PINCH_IN_THRESHOLD = 1.08; // intentionally low for effortless trigger
 const PINCH_OUT_THRESHOLD = 0.93;
 
 export default function Library() {
@@ -102,7 +101,6 @@ export default function Library() {
   const scrollFraction = useSharedValue(0);
   const contentHeightRef = useRef(1);
 
-  // Reanimated shared values for pinch animation
   const gridScale = useSharedValue(1);
   const hasTriggered = useSharedValue(false);
   const inSelectModeShared = useSharedValue(false);
@@ -111,14 +109,12 @@ export default function Library() {
     inSelectModeShared.value = inSelectMode;
   }, [inSelectMode, inSelectModeShared]);
 
-  // ── scroll to top ────────────────────────────────────────────────────────────
   useEffect(() => {
     return addTabScrollToTopListener("index", () => {
       gridRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
   }, []);
 
-  // ── toolbar slide animation ───────────────────────────────────────────────────
   useEffect(() => {
     toolbarOffset.value = withSpring(
       inSelectMode ? 0 : TOOLBAR_HEIGHT + 20,
@@ -127,7 +123,6 @@ export default function Library() {
     toolbarOpacity.value = withTiming(inSelectMode ? 1 : 0, { duration: 150 });
   }, [inSelectMode, toolbarOffset, toolbarOpacity]);
 
-  // ── zoom ─────────────────────────────────────────────────────────────────────
   const doZoomIn = useCallback(() => {
     setFamily((f) => {
       const next = zoomInFamily(f);
@@ -164,7 +159,6 @@ export default function Library() {
     })
     .onUpdate((e) => {
       if (inSelectModeShared.value) return;
-      // Real-time visual scale — clamped so it never looks broken
       gridScale.value = Math.max(0.82, Math.min(1.22, e.scale));
       if (hasTriggered.value) return;
       if (e.scale > PINCH_IN_THRESHOLD) {
@@ -179,7 +173,6 @@ export default function Library() {
       gridScale.value = withSpring(1, ZOOM_SPRING);
     });
 
-  // ── select mode ───────────────────────────────────────────────────────────────
   const inSelectModeRef = useRef(inSelectMode);
   inSelectModeRef.current = inSelectMode;
 
@@ -224,7 +217,6 @@ export default function Library() {
     router.push({ pathname: "/photo/[id]", params: { id: p.id } });
   }, []);
 
-  // ── bulk actions ──────────────────────────────────────────────────────────────
   const selectedCount = selectedIds.size;
   const hasSelection = selectedCount > 0;
 
@@ -241,17 +233,12 @@ export default function Library() {
     if (item.id.startsWith("saf:")) {
       srcUri = item.uri;
     } else {
-      const info = await MediaLibrary.getAssetInfoAsync(item.id).catch(
-        () => null,
-      );
+      const info = await MediaLibrary.getAssetInfoAsync(item.id).catch(() => null);
       srcUri = info?.localUri ?? item.uri ?? null;
     }
 
     if (!srcUri) {
-      Alert.alert(
-        "Unable to Share",
-        "Could not resolve local file path for this item.",
-      );
+      Alert.alert("Unable to Share", "Could not resolve local file path for this item.");
       cancelSelectMode();
       return;
     }
@@ -279,13 +266,7 @@ export default function Library() {
     setFavoritesBulk(ids, !allFav);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     cancelSelectMode();
-  }, [
-    hasSelection,
-    selectedIds,
-    favoriteIds,
-    setFavoritesBulk,
-    cancelSelectMode,
-  ]);
+  }, [hasSelection, selectedIds, favoriteIds, setFavoritesBulk, cancelSelectMode]);
 
   const archiveSelected = useCallback(() => {
     if (!hasSelection) return;
@@ -304,13 +285,7 @@ export default function Library() {
         },
       ],
     );
-  }, [
-    hasSelection,
-    selectedCount,
-    selectedIds,
-    archivePhotosBulk,
-    cancelSelectMode,
-  ]);
+  }, [hasSelection, selectedCount, selectedIds, archivePhotosBulk, cancelSelectMode]);
 
   const deleteSelected = useCallback(() => {
     if (!hasSelection) return;
@@ -323,9 +298,7 @@ export default function Library() {
           text: "Delete",
           style: "destructive",
           onPress: () => {
-            moveToRecentlyDeletedBulk(
-              photos.filter((p) => selectedIds.has(p.id)),
-            );
+            moveToRecentlyDeletedBulk(photos.filter((p) => selectedIds.has(p.id)));
             cancelSelectMode();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
@@ -351,14 +324,10 @@ export default function Library() {
   const headerHeight = insets.top + 76;
   const dockClearance = insets.bottom + 90;
 
-  // ── section title + scrollbar data ───────────────────────────────────────────
-  const handleSectionChange = useCallback(
-    (title: string, subtitle?: string) => {
-      setSectionTitle(title);
-      setSectionSub(subtitle);
-    },
-    [],
-  );
+  const handleSectionChange = useCallback((title: string, subtitle?: string) => {
+    setSectionTitle(title);
+    setSectionSub(subtitle);
+  }, []);
 
   const handleScrollY = useCallback(
     (y: number) => {
@@ -385,9 +354,7 @@ export default function Library() {
   const scrollBarContainerH = height - headerHeight - (insets.bottom + 90);
   const displayTitle =
     sectionTitle ??
-    (family === "all"
-      ? "All Photos"
-      : family.charAt(0).toUpperCase() + family.slice(1));
+    (family === "all" ? "All Photos" : family.charAt(0).toUpperCase() + family.slice(1));
   const displaySub = sectionTitle
     ? sectionSub
     : `${totalCount.toLocaleString()} item${totalCount === 1 ? "" : "s"}`;
@@ -403,9 +370,7 @@ export default function Library() {
   }));
 
   if (permission === "undetermined") {
-    return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]} />
-    );
+    return <View style={[styles.fill, { backgroundColor: colors.background }]} />;
   }
 
   if (permission === "denied") {
@@ -479,9 +444,7 @@ export default function Library() {
               hitSlop={12}
               style={styles.selectBarSide}
             >
-              <Text style={[typography.body, { color: colors.accent }]}>
-                Cancel
-              </Text>
+              <Text style={[typography.body, { color: colors.accent }]}>Cancel</Text>
             </Pressable>
             <Text
               style={[
@@ -492,16 +455,9 @@ export default function Library() {
             >
               {selectedCount > 0 ? `${selectedCount} Selected` : "Select Items"}
             </Text>
-            <Pressable
-              onPress={selectAll}
-              hitSlop={12}
-              style={styles.selectBarSide}
-            >
+            <Pressable onPress={selectAll} hitSlop={12} style={styles.selectBarSide}>
               <Text
-                style={[
-                  typography.body,
-                  { color: colors.accent, textAlign: "right" },
-                ]}
+                style={[typography.body, { color: colors.accent, textAlign: "right" }]}
               >
                 {selectedCount === photos.length ? "None" : "All"}
               </Text>
@@ -514,11 +470,7 @@ export default function Library() {
 
       {/* Bulk action toolbar */}
       <Animated.View
-        style={[
-          styles.toolbar,
-          { bottom: selectToolbarBottom },
-          toolbarAnimStyle,
-        ]}
+        style={[styles.toolbar, { bottom: selectToolbarBottom }, toolbarAnimStyle]}
         pointerEvents={inSelectMode ? "box-none" : "none"}
       >
         <GlassView intensity={80} bordered style={styles.toolbarInner}>
@@ -568,10 +520,7 @@ export default function Library() {
             style={{ marginTop: 1 }}
           />
           <Text
-            style={[
-              typography.footnote,
-              { color: colors.text, flex: 1, lineHeight: 18 },
-            ]}
+            style={[typography.footnote, { color: colors.text, flex: 1, lineHeight: 18 }]}
           >
             Some app photos (e.g. WhatsApp) may be hidden.{" "}
             <Text

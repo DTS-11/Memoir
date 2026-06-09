@@ -1,11 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import {
-  type LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -32,12 +26,9 @@ export default function FavoritesScreen() {
     router.push({ pathname: "/photo/[id]", params: { id: p.id } });
   }, []);
 
-  const overrideItemLayout = useCallback(
-    (layout: { span?: number }, item: GridItem) => {
-      if (item.type === "header") layout.span = COLS;
-    },
-    [],
-  );
+  const overrideItemLayout = useCallback((layout: { span?: number }, item: GridItem) => {
+    if (item.type === "header") layout.span = COLS;
+  }, []);
 
   const contentContainerStyle = useMemo(
     () => ({ paddingBottom: insets.bottom + 20 }),
@@ -87,23 +78,14 @@ export default function FavoritesScreen() {
           },
         ]}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          style={styles.headerSide}
-        >
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
           <Ionicons name="chevron-back" size={24} color={colors.accent} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={[typography.headline, { color: colors.text }]}>
-            Favorites
-          </Text>
+          <Text style={[typography.headline, { color: colors.text }]}>Favorites</Text>
           {favoritePhotos.length > 0 && (
             <Text
-              style={[
-                typography.footnote,
-                { color: colors.textSecondary, marginTop: 1 },
-              ]}
+              style={[typography.footnote, { color: colors.textSecondary, marginTop: 1 }]}
             >
               {favoritePhotos.length} item
               {favoritePhotos.length === 1 ? "" : "s"}

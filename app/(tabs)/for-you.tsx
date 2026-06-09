@@ -159,10 +159,7 @@ export default function ForYou() {
               onPress={() =>
                 router.push({ pathname: "/photo/[id]", params: { id: p.id } })
               }
-              style={[
-                styles.feature,
-                { backgroundColor: colors.thumbPlaceholder },
-              ]}
+              style={[styles.feature, { backgroundColor: colors.thumbPlaceholder }]}
             >
               <Image
                 source={{ uri: p.uri }}
@@ -183,8 +180,7 @@ function MemoryCard({ memory, width }: { memory: Memory; width: number }) {
   return (
     <Pressable
       onPress={() =>
-        cover &&
-        router.push({ pathname: "/photo/[id]", params: { id: cover.id } })
+        cover && router.push({ pathname: "/photo/[id]", params: { id: cover.id } })
       }
       style={[styles.memCard, { width, height: width * 1.05 }]}
     >

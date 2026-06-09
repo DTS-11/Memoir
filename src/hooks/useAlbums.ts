@@ -9,9 +9,7 @@ export type AlbumPreview = {
   type: "user" | "smart";
 };
 
-async function previewForAlbum(
-  album: MediaLibrary.Album,
-): Promise<AlbumPreview> {
+async function previewForAlbum(album: MediaLibrary.Album): Promise<AlbumPreview> {
   let coverUri: string | undefined;
   try {
     const assets = await MediaLibrary.getAssetsAsync({

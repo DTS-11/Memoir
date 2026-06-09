@@ -35,14 +35,10 @@ function PhotoThumbImpl({
   const { colors } = useTheme();
   const isVideo = photo.mediaType === "video";
   const isAudio = photo.mediaType === "audio";
-  // Photos and videos have visual thumbnails; audio/unknown get placeholder UI
   const hasVisual = photo.mediaType === "photo" || photo.mediaType === "video";
 
   const handlePress = useCallback(() => onPress?.(photo), [onPress, photo]);
-  const handleLongPress = useCallback(
-    () => onLongPress?.(photo),
-    [onLongPress, photo],
-  );
+  const handleLongPress = useCallback(() => onLongPress?.(photo), [onLongPress, photo]);
 
   const iconSize = Math.round(size * 0.34);
 
@@ -79,7 +75,6 @@ function PhotoThumbImpl({
             />
           </View>
         ) : (
-          // "unknown" type — try image, placeholder colour already shows beneath
           <>
             <Image
               source={{ uri: photo.uri }}
@@ -100,17 +95,14 @@ function PhotoThumbImpl({
           </>
         )}
 
-        {/* Selection dim */}
         {selected && <View style={styles.selectedDim} />}
+        {selected && <View style={[styles.selectionRing, { borderRadius: radius }]} />}
 
-        {/* Selection ring */}
-        {selected && (
-          <View style={[styles.selectionRing, { borderRadius: radius }]} />
-        )}
-
-        {/* Duration badge — videos and audio (hide when duration unknown) */}
         {(isVideo || isAudio) && photo.duration > 0 && (
           <View style={styles.durationBadge}>
+            {isVideo && (
+              <Ionicons name="play" size={9} color="#FFF" style={{ marginRight: 2 }} />
+            )}
             {isAudio && (
               <Ionicons
                 name="musical-note"
@@ -119,24 +111,18 @@ function PhotoThumbImpl({
                 style={{ marginRight: 2 }}
               />
             )}
-            <Text style={styles.durationText}>
-              {formatDuration(photo.duration)}
-            </Text>
+            <Text style={styles.durationText}>{formatDuration(photo.duration)}</Text>
           </View>
         )}
 
-        {/* Favorite heart */}
         {isFavorite && !inSelectMode && (
           <View style={styles.favBadge}>
             <Ionicons name="heart" size={11} color="#FFF" />
           </View>
         )}
 
-        {/* Select-mode checkbox */}
         {inSelectMode && (
-          <View
-            style={[styles.checkCircle, selected && styles.checkCircleSelected]}
-          >
+          <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
             {selected && <Ionicons name="checkmark" size={12} color="#000" />}
           </View>
         )}

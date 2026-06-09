@@ -67,8 +67,7 @@ export const categories: Category[] = [
     key: "raw",
     label: "RAW Photos",
     icon: "aperture-outline",
-    match: (p) =>
-      /\.(dng|raw|arw|cr2|nef|orf|rw2|raf|3fr|iiq)$/i.test(p.filename),
+    match: (p) => /\.(dng|raw|arw|cr2|nef|orf|rw2|raf|3fr|iiq)$/i.test(p.filename),
   },
 ];
 

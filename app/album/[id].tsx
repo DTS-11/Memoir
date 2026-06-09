@@ -92,11 +92,7 @@ export default function AlbumScreen() {
           subtitle={`${photos.length}${hasMore ? "+" : ""} items`}
           right={
             <Pressable onPress={() => router.back()} hitSlop={10}>
-              <Ionicons
-                name="chevron-back-circle"
-                size={28}
-                color={colors.accent}
-              />
+              <Ionicons name="chevron-back-circle" size={28} color={colors.accent} />
             </Pressable>
           }
         />

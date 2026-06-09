@@ -4,10 +4,7 @@ export function emitTabScrollToTop(tabName: string) {
   listeners.get(tabName)?.forEach((listener) => listener());
 }
 
-export function addTabScrollToTopListener(
-  tabName: string,
-  listener: () => void,
-) {
+export function addTabScrollToTopListener(tabName: string, listener: () => void) {
   const tabListeners = listeners.get(tabName) ?? new Set<() => void>();
   tabListeners.add(listener);
   listeners.set(tabName, tabListeners);

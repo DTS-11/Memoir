@@ -1,11 +1,4 @@
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -14,17 +7,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
   useWindowDimensions,
 } from "react-native";
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -37,7 +23,11 @@ import { useMediaCounts } from "../../src/hooks/useMediaCounts";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { categories } from "../../src/utils/categories";
 import { GlassView } from "../../src/components/GlassView";
+import { PeopleSection } from "../../src/components/PeopleSection";
 import { semantic } from "../../src/theme/tokens";
+import { useFaceProcessing } from "../../src/hooks/useFaceProcessing";
+import { usePeople } from "../../src/hooks/usePeople";
+import type { PersonWithCover } from "../../src/hooks/usePeople";
 
 // ── memory helpers ────────────────────────────────────────────────────────────
 
@@ -141,6 +131,31 @@ export default function BrowseScreen() {
   const memories = useMemo(() => buildMemories(photos), [photos]);
   const mediaCounts = useMediaCounts(enabled);
 
+  // ── People / face grouping ─────────────────────────────────────────────────
+  const { progress, startScan, stopScan } = useFaceProcessing();
+  const [peopleRefresh, setPeopleRefresh] = useState(0);
+  const { persons, loading: loadingPeople } = usePeople(photos, peopleRefresh);
+
+  // Bump the refresh key when a scan finishes so usePeople reloads
+  const prevStatusRef = React.useRef(progress.status);
+  useEffect(() => {
+    if (
+      prevStatusRef.current !== progress.status &&
+      (progress.status === "done" || progress.status === "up_to_date")
+    ) {
+      setPeopleRefresh((n) => n + 1);
+    }
+    prevStatusRef.current = progress.status;
+  }, [progress.status]);
+
+  const handlePersonPress = useCallback((person: PersonWithCover) => {
+    router.push({ pathname: "/people/[id]", params: { id: person.id } });
+  }, []);
+
+  const handleStartScan = useCallback(() => {
+    if (enabled) startScan(photos);
+  }, [enabled, startScan, photos]);
+
   const categoryCounts = useMemo(
     () =>
       categories.map((c) => ({
@@ -163,19 +178,14 @@ export default function BrowseScreen() {
       .filter((p) => {
         if (q) {
           const d = new Date(p.creationTime);
-          const monthName = d
-            .toLocaleString(undefined, { month: "long" })
-            .toLowerCase();
+          const monthName = d.toLocaleString(undefined, { month: "long" }).toLowerCase();
           const textMatch =
             p.filename.toLowerCase().includes(q) ||
             monthName.includes(q) ||
             String(d.getFullYear()).includes(q);
           if (!textMatch) return false;
         }
-        if (
-          activeMedia.size > 0 &&
-          !activeMedia.has(p.mediaType as MediaFilter)
-        )
+        if (activeMedia.size > 0 && !activeMedia.has(p.mediaType as MediaFilter))
           return false;
         if (
           activeDates.size > 0 &&
@@ -202,10 +212,7 @@ export default function BrowseScreen() {
 
   const openFavorites = useCallback(() => router.push("/favorites"), []);
   const openArchive = useCallback(() => router.push("/archive"), []);
-  const openRecentlyDeleted = useCallback(
-    () => router.push("/recently-deleted"),
-    [],
-  );
+  const openRecentlyDeleted = useCallback(() => router.push("/recently-deleted"), []);
 
   // top padding = safe area + search bar height + small gap
   const scrollTopPad = insets.top + SEARCH_BAR_H + 8;
@@ -274,6 +281,21 @@ export default function BrowseScreen() {
         ) : (
           /* ── browse sections ────────────────────────────────────────────── */
           <>
+            {/* People */}
+            {enabled && (
+              <>
+                <SectionTitle title="People" />
+                <PeopleSection
+                  persons={persons}
+                  loadingPeople={loadingPeople}
+                  progress={progress}
+                  onStartScan={handleStartScan}
+                  onStopScan={stopScan}
+                  onPersonPress={handlePersonPress}
+                />
+              </>
+            )}
+
             {/* Memories */}
             {memories.length > 0 && (
               <>
@@ -314,12 +336,7 @@ export default function BrowseScreen() {
                 {albumsExpanded && (
                   <View style={styles.albumGrid}>
                     {albums.map((a) => (
-                      <AlbumCard
-                        key={a.id}
-                        album={a}
-                        width={cardW}
-                        onPress={openAlbum}
-                      />
+                      <AlbumCard key={a.id} album={a} width={cardW} onPress={openAlbum} />
                     ))}
                   </View>
                 )}
@@ -328,9 +345,7 @@ export default function BrowseScreen() {
 
             {/* Utilities */}
             <SectionTitle title="Utilities" />
-            <View
-              style={[styles.list, { backgroundColor: colors.surfaceElevated }]}
-            >
+            <View style={[styles.list, { backgroundColor: colors.surfaceElevated }]}>
               <UtilityRow
                 icon="heart"
                 iconColor={semantic.favorite}
@@ -365,12 +380,7 @@ export default function BrowseScreen() {
             {categoryCounts.some((c) => c.count > 0) && (
               <>
                 <SectionTitle title="Categories" />
-                <View
-                  style={[
-                    styles.list,
-                    { backgroundColor: colors.surfaceElevated },
-                  ]}
-                >
+                <View style={[styles.list, { backgroundColor: colors.surfaceElevated }]}>
                   {categoryCounts.map((c, i) => {
                     if (c.count === 0) return null;
                     return (
@@ -420,11 +430,7 @@ export default function BrowseScreen() {
           />
           {hasActiveFilters && (
             <Pressable onPress={clearFilters} hitSlop={10}>
-              <Ionicons
-                name="close-circle"
-                size={17}
-                color={colors.textTertiary}
-              />
+              <Ionicons name="close-circle" size={17} color={colors.textTertiary} />
             </Pressable>
           )}
         </View>
@@ -436,8 +442,7 @@ export default function BrowseScreen() {
         >
           {(["photo", "video", "audio"] as MediaFilter[]).map((f) => {
             const active = activeMedia.has(f);
-            const label =
-              f === "photo" ? "Photos" : f === "video" ? "Videos" : "Audio";
+            const label = f === "photo" ? "Photos" : f === "video" ? "Videos" : "Audio";
             return (
               <Pressable
                 key={f}
@@ -466,9 +471,7 @@ export default function BrowseScreen() {
               </Pressable>
             );
           })}
-          <View
-            style={[styles.chipDivider, { backgroundColor: colors.separator }]}
-          />
+          <View style={[styles.chipDivider, { backgroundColor: colors.separator }]} />
           {(
             [
               ["7d", "Last 7 Days"],
@@ -544,8 +547,7 @@ const MemoryCard = memo(function MemoryCard({
 }) {
   const cover = memory.photos[0];
   const onPress = useCallback(() => {
-    if (cover)
-      router.push({ pathname: "/photo/[id]", params: { id: cover.id } });
+    if (cover) router.push({ pathname: "/photo/[id]", params: { id: cover.id } });
   }, [cover]);
   return (
     <Pressable
@@ -585,9 +587,7 @@ const AlbumCard = memo(function AlbumCard({
   return (
     <Pressable
       onPress={handlePress}
-      style={({ pressed }) => [
-        { width, marginBottom: 14, opacity: pressed ? 0.85 : 1 },
-      ]}
+      style={({ pressed }) => [{ width, marginBottom: 14, opacity: pressed ? 0.85 : 1 }]}
     >
       <View
         style={[
@@ -602,12 +602,7 @@ const AlbumCard = memo(function AlbumCard({
             contentFit="cover"
           />
         ) : (
-          <View
-            style={[
-              styles.albumCoverFallback,
-              { backgroundColor: colors.surface },
-            ]}
-          >
+          <View style={[styles.albumCoverFallback, { backgroundColor: colors.surface }]}>
             <Ionicons name="images" size={28} color={colors.textTertiary} />
           </View>
         )}
@@ -657,12 +652,7 @@ const UtilityRow = memo(function UtilityRow({
         pressed && { backgroundColor: colors.surface },
       ]}
     >
-      <View
-        style={[
-          styles.rowThumb,
-          { backgroundColor: iconBg, overflow: "hidden" },
-        ]}
-      >
+      <View style={[styles.rowThumb, { backgroundColor: iconBg, overflow: "hidden" }]}>
         {coverUri ? (
           <Image
             source={{ uri: coverUri }}
@@ -675,13 +665,9 @@ const UtilityRow = memo(function UtilityRow({
           </View>
         )}
       </View>
-      <Text style={[typography.body, { color: colors.text, flex: 1 }]}>
-        {label}
-      </Text>
+      <Text style={[typography.body, { color: colors.text, flex: 1 }]}>{label}</Text>
       {count > 0 && (
-        <Text style={[typography.subhead, { color: colors.textSecondary }]}>
-          {count}
-        </Text>
+        <Text style={[typography.subhead, { color: colors.textSecondary }]}>{count}</Text>
       )}
       <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
     </Pressable>
@@ -704,8 +690,7 @@ const CategoryRow = memo(function CategoryRow({
 }) {
   const { colors, typography } = useTheme();
   const onPress = useCallback(
-    () =>
-      router.push({ pathname: "/category/[key]", params: { key: cat.key } }),
+    () => router.push({ pathname: "/category/[key]", params: { key: cat.key } }),
     [cat.key],
   );
   return (
@@ -723,15 +708,8 @@ const CategoryRow = memo(function CategoryRow({
       <View style={[styles.catIcon, { backgroundColor: colors.accentMuted }]}>
         <Ionicons name={cat.icon} size={17} color={colors.accent} />
       </View>
-      <Text style={[typography.body, { color: colors.text, flex: 1 }]}>
-        {cat.label}
-      </Text>
-      <Text
-        style={[
-          typography.subhead,
-          { color: colors.textSecondary, marginRight: 6 },
-        ]}
-      >
+      <Text style={[typography.body, { color: colors.text, flex: 1 }]}>{cat.label}</Text>
+      <Text style={[typography.subhead, { color: colors.textSecondary, marginRight: 6 }]}>
         {cat.count.toLocaleString()}
       </Text>
       <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />

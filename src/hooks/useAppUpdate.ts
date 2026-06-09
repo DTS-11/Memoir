@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
-const RELEASES_URL =
-  "https://api.github.com/repos/DTS-11/Memoir/releases/latest";
+const RELEASES_URL = "https://api.github.com/repos/DTS-11/Memoir/releases/latest";
 const DISMISS_KEY = "memoir:update-dismissed-version";
 const LAST_CHECK_KEY = "memoir:update-last-check";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -100,9 +99,7 @@ export function useAppUpdate() {
         const dismissed = await AsyncStorage.getItem(DISMISS_KEY);
         if (dismissed === latest) return;
 
-        const apk = data.assets.find((a) =>
-          a.name.toLowerCase().endsWith(".apk"),
-        );
+        const apk = data.assets.find((a) => a.name.toLowerCase().endsWith(".apk"));
 
         if (cancelled) return;
         setUpdate({

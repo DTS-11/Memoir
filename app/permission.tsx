@@ -27,9 +27,7 @@ export default function PermissionScreen() {
         bordered
         style={[styles.card, { marginTop: insets.top + 80 }]}
       >
-        <View
-          style={[styles.iconWrap, { backgroundColor: colors.accentMuted }]}
-        >
+        <View style={[styles.iconWrap, { backgroundColor: colors.accentMuted }]}>
           <Ionicons name="images" size={36} color={colors.accent} />
         </View>
         <Text
@@ -51,8 +49,8 @@ export default function PermissionScreen() {
             },
           ]}
         >
-          Memoir needs access to your photos to build a beautiful gallery from
-          your library. Nothing leaves your device.
+          Memoir needs access to your photos to build a beautiful gallery from your
+          library. Nothing leaves your device.
         </Text>
 
         <Pressable

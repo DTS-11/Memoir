@@ -60,18 +60,13 @@ export function Dock(props: BottomTabBarProps) {
         intensity={Platform.OS === "ios" ? 80 : 100}
         bordered
         interactive
-        style={[
-          styles.dock,
-          { borderColor: colors.glassBorder, width: pillWidth },
-        ]}
+        style={[styles.dock, { borderColor: colors.glassBorder, width: pillWidth }]}
       >
         <Animated.View
           style={[
             styles.indicator,
             {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.11)"
-                : "rgba(0,0,0,0.07)",
+              backgroundColor: isDark ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)",
               width: indicatorWidth,
             },
             indicatorStyle,

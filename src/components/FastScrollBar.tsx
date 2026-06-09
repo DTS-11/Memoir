@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import type { FlashListRef } from "@shopify/flash-list";
@@ -18,7 +19,7 @@ type Section = { title: string; subtitle?: string; y: number };
 
 type Props = {
   /** Current scroll offset ÷ max scroll offset, range [0, 1]. */
-  scrollFraction: Animated.SharedValue<number>;
+  scrollFraction: SharedValue<number>;
   /** Visible height of the scroll area (pixels). */
   containerHeight: number;
   /** Total scrollable content height (pixels). */
@@ -69,9 +70,7 @@ export function FastScrollBar({
   const lastSnapIdxRef = useRef(-1);
 
   // Label shown while dragging
-  const [label, setLabel] = useState<{ title: string; sub?: string } | null>(
-    null,
-  );
+  const [label, setLabel] = useState<{ title: string; sub?: string } | null>(null);
 
   // Sync thumb to scroll fraction when not dragging
   useAnimatedReaction(
@@ -100,10 +99,7 @@ export function FastScrollBar({
     (rawThumbTop: number) => {
       const maxThumb = Math.max(1, trackHRef.current - THUMB_H);
       const fraction = rawThumbTop / maxThumb;
-      const maxOffset = Math.max(
-        0,
-        contentHeightRef.current - trackHRef.current,
-      );
+      const maxOffset = Math.max(0, contentHeightRef.current - trackHRef.current);
       const rawOffset = fraction * maxOffset;
 
       const shouldSnap = family === "months" || family === "years";
@@ -181,24 +177,14 @@ export function FastScrollBar({
 
   return (
     <View
-      style={[
-        styles.container,
-        { top: topOffset + TRACK_PAD_V, height: trackH },
-      ]}
+      style={[styles.container, { top: topOffset + TRACK_PAD_V, height: trackH }]}
       pointerEvents="box-none"
     >
       {/* Label bubble */}
       <Animated.View style={[styles.label, labelStyle]} pointerEvents="none">
         {label && (
-          <View
-            style={[
-              styles.labelBubble,
-              { backgroundColor: colors.surfaceElevated },
-            ]}
-          >
-            <Text style={[styles.labelTitle, { color: colors.text }]}>
-              {label.title}
-            </Text>
+          <View style={[styles.labelBubble, { backgroundColor: colors.surfaceElevated }]}>
+            <Text style={[styles.labelTitle, { color: colors.text }]}>{label.title}</Text>
             {!!label.sub && (
               <Text style={[styles.labelSub, { color: colors.textSecondary }]}>
                 {label.sub}

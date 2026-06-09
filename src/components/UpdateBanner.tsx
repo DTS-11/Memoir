@@ -58,16 +58,11 @@ export function UpdateBanner() {
         bordered
         style={[styles.card, { borderColor: colors.glassBorder }]}
       >
-        <View
-          style={[styles.iconWrap, { backgroundColor: colors.accentMuted }]}
-        >
+        <View style={[styles.iconWrap, { backgroundColor: colors.accentMuted }]}>
           <Ionicons name="arrow-down-circle" size={22} color={colors.accent} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text
-            style={[typography.subhead, { color: colors.text }]}
-            numberOfLines={1}
-          >
+          <Text style={[typography.subhead, { color: colors.text }]} numberOfLines={1}>
             Memoir {update.latestVersion} is available
           </Text>
           <Text

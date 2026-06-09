@@ -4,12 +4,7 @@ import {
   isGlassEffectAPIAvailable,
   isLiquidGlassAvailable,
 } from "expo-glass-effect";
-import {
-  type ViewStyle,
-  type StyleProp,
-  StyleSheet,
-  Platform,
-} from "react-native";
+import { type ViewStyle, type StyleProp, Platform, StyleSheet } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 
 type Props = {
@@ -20,14 +15,6 @@ type Props = {
   interactive?: boolean;
 };
 
-/**
- * Frosted glass surface. On Android we opt into expo-blur's dimezisBlurView
- * backend, which is dramatically cheaper than the default and the reason
- * scrolling underneath the dock used to drop frames.
- *
- * `borderCurve: 'continuous'` is a no-op on Android but gives proper iOS
- * squircle corners on iOS — matching the platform's own rounded surfaces.
- */
 export function GlassView({
   intensity = 70,
   style,
@@ -37,11 +24,7 @@ export function GlassView({
 }: Props) {
   const { mode, colors } = useTheme();
 
-  if (
-    Platform.OS === "ios" &&
-    isLiquidGlassAvailable() &&
-    isGlassEffectAPIAvailable()
-  ) {
+  if (Platform.OS === "ios" && isLiquidGlassAvailable() && isGlassEffectAPIAvailable()) {
     return (
       <NativeGlassView
         colorScheme={mode}
@@ -59,9 +42,6 @@ export function GlassView({
     <BlurView
       intensity={intensity}
       tint={mode === "dark" ? "dark" : "light"}
-      experimentalBlurMethod={
-        Platform.OS === "android" ? "dimezisBlurView" : "none"
-      }
       style={[
         styles.base,
         { backgroundColor: colors.glassTint, borderColor: colors.glassBorder },
@@ -77,8 +57,7 @@ export function GlassView({
 const styles = StyleSheet.create({
   base: {
     overflow: "hidden",
-    // iOS-only property — Android ignores. Renders proper Apple squircle corners.
-    borderCurve: "continuous",
+    borderCurve: "continuous", // squircle corners on iOS; no-op on Android
   },
   bordered: {
     borderWidth: StyleSheet.hairlineWidth,

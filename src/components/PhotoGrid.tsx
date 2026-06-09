@@ -1,15 +1,5 @@
-import {
-  FlashList,
-  type ListRenderItem,
-  type FlashListRef,
-} from "@shopify/flash-list";
-import {
-  memo,
-  useCallback,
-  useMemo,
-  useRef,
-  type MutableRefObject,
-} from "react";
+import { FlashList, type ListRenderItem, type FlashListRef } from "@shopify/flash-list";
+import { memo, useCallback, useMemo, useRef, type MutableRefObject } from "react";
 import {
   StyleSheet,
   Text,
@@ -62,12 +52,7 @@ const SectionHeader = memo(function SectionHeader({
     <View style={styles.header}>
       <Text style={[typography.title3, { color: colors.text }]}>{title}</Text>
       {!!subtitle && (
-        <Text
-          style={[
-            typography.subhead,
-            { color: colors.textSecondary, marginTop: 2 },
-          ]}
-        >
+        <Text style={[typography.subhead, { color: colors.textSecondary, marginTop: 2 }]}>
           {subtitle}
         </Text>
       )}
@@ -97,10 +82,7 @@ export function PhotoGrid({
   const columns = FAMILY_COLUMNS[family];
   const tileSize = width / columns;
 
-  const items = useMemo<GridItem[]>(
-    () => buildGrid(photos, family),
-    [photos, family],
-  );
+  const items = useMemo<GridItem[]>(() => buildGrid(photos, family), [photos, family]);
 
   // Map each item id → its section header for O(1) lookup during scroll
   const sectionMap = useMemo(() => {

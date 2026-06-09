@@ -24,8 +24,7 @@ const COLS = 3;
 export default function ArchiveScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { archivedPhotos, unarchivePhoto, moveToRecentlyDeletedBulk } =
-    usePhotos();
+  const { archivedPhotos, unarchivePhoto, moveToRecentlyDeletedBulk } = usePhotos();
   const { width } = useWindowDimensions();
   const [unlocked, setUnlocked] = useState(false);
   const didAttempt = useRef(false);
@@ -164,15 +163,8 @@ export default function ArchiveScreen() {
           )}
           {selecting && isSelected && <View style={styles.selectedOverlay} />}
           {selecting && (
-            <View
-              style={[
-                styles.checkCircle,
-                isSelected && styles.checkCircleSelected,
-              ]}
-            >
-              {isSelected && (
-                <Ionicons name="checkmark" size={13} color="#000" />
-              )}
+            <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+              {isSelected && <Ionicons name="checkmark" size={13} color="#000" />}
             </View>
           )}
         </Pressable>
@@ -184,9 +176,7 @@ export default function ArchiveScreen() {
   const hasSelection = selected.size > 0;
 
   if (!unlocked) {
-    return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]} />
-    );
+    return <View style={[styles.fill, { backgroundColor: colors.background }]} />;
   }
 
   return (
@@ -201,23 +191,14 @@ export default function ArchiveScreen() {
           },
         ]}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          style={styles.headerSide}
-        >
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
           <Ionicons name="chevron-back" size={24} color={colors.accent} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={[typography.headline, { color: colors.text }]}>
-            Archive
-          </Text>
+          <Text style={[typography.headline, { color: colors.text }]}>Archive</Text>
           {archivedPhotos.length > 0 && (
             <Text
-              style={[
-                typography.footnote,
-                { color: colors.textSecondary, marginTop: 1 },
-              ]}
+              style={[typography.footnote, { color: colors.textSecondary, marginTop: 1 }]}
             >
               {archivedPhotos.length} item
               {archivedPhotos.length === 1 ? "" : "s"}
@@ -234,10 +215,7 @@ export default function ArchiveScreen() {
             style={[
               typography.body,
               {
-                color:
-                  archivedPhotos.length === 0
-                    ? colors.textTertiary
-                    : colors.accent,
+                color: archivedPhotos.length === 0 ? colors.textTertiary : colors.accent,
                 textAlign: "right",
               },
             ]}
@@ -270,10 +248,7 @@ export default function ArchiveScreen() {
           <GlassView
             intensity={80}
             bordered
-            style={[
-              styles.toolbar,
-              { paddingBottom: Math.max(insets.bottom, 12) },
-            ]}
+            style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}
           >
             {selecting ? (
               <>
@@ -304,9 +279,7 @@ export default function ArchiveScreen() {
                       style={[
                         typography.subhead,
                         {
-                          color: hasSelection
-                            ? colors.accent
-                            : colors.textTertiary,
+                          color: hasSelection ? colors.accent : colors.textTertiary,
                         },
                       ]}
                     >

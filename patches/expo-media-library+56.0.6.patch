@@ -1,0 +1,23 @@
+diff --git a/node_modules/expo-media-library/android/src/main/java/expo/modules/medialibrary/assets/GetAssetsQuery.kt b/node_modules/expo-media-library/android/src/main/java/expo/modules/medialibrary/assets/GetAssetsQuery.kt
+index 0d3748e..a25831c 100644
+--- a/node_modules/expo-media-library/android/src/main/java/expo/modules/medialibrary/assets/GetAssetsQuery.kt
++++ b/node_modules/expo-media-library/android/src/main/java/expo/modules/medialibrary/assets/GetAssetsQuery.kt
+@@ -1,5 +1,6 @@
+ package expo.modules.medialibrary.assets
+ 
++import android.os.Build
+ import android.provider.MediaStore
+ import expo.modules.core.utilities.ifNull
+ import expo.modules.medialibrary.AssetsOptions
+@@ -62,6 +63,11 @@ private fun createSelectionString(input: AssetsOptions): String {
+     selectionBuilder.append(" AND ${MediaStore.Images.Media.DATE_TAKEN} < ${it.toLong()}")
+   }
+ 
++  // IS_TRASHED added in API 29; some OEM builds expose trashed items without MANAGE_MEDIA
++  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++    selectionBuilder.append(" AND ${MediaStore.MediaColumns.IS_TRASHED} = 0")
++  }
++
+   return selectionBuilder.toString()
+ }
+ 

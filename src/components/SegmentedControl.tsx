@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -57,18 +51,12 @@ export function SegmentedControl<T extends string>({
       style={[
         styles.track,
         {
-          backgroundColor: isDark
-            ? "rgba(118,118,128,0.24)"
-            : "rgba(118,118,128,0.12)",
+          backgroundColor: isDark ? "rgba(118,118,128,0.24)" : "rgba(118,118,128,0.12)",
         },
       ]}
     >
       <Animated.View
-        style={[
-          styles.indicator,
-          { backgroundColor: colors.surfaceElevated },
-          indicator,
-        ]}
+        style={[styles.indicator, { backgroundColor: colors.surfaceElevated }, indicator]}
       />
       {options.map((o) => (
         <Pressable

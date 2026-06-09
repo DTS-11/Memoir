@@ -29,8 +29,7 @@ const COLS = 3;
 export default function RecentlyDeletedScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { deletedItems, restoreDeletedPhotoBulk, deleteForeverBulk } =
-    usePhotos();
+  const { deletedItems, restoreDeletedPhotoBulk, deleteForeverBulk } = usePhotos();
   const { width } = useWindowDimensions();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selecting, setSelecting] = useState(false);
@@ -178,15 +177,8 @@ export default function RecentlyDeletedScreen() {
           <View style={styles.tileGradient} />
           <Text style={styles.tileAge}>{daysRemaining(item.deletedAt)}</Text>
           {selecting && (
-            <View
-              style={[
-                styles.checkCircle,
-                isSelected && styles.checkCircleSelected,
-              ]}
-            >
-              {isSelected && (
-                <Ionicons name="checkmark" size={13} color="#000" />
-              )}
+            <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+              {isSelected && <Ionicons name="checkmark" size={13} color="#000" />}
             </View>
           )}
           {selecting && isSelected && <View style={styles.selectedOverlay} />}
@@ -212,11 +204,7 @@ export default function RecentlyDeletedScreen() {
           },
         ]}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          style={styles.headerSide}
-        >
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
           <Ionicons name="chevron-back" size={24} color={colors.accent} />
         </Pressable>
         <View style={styles.headerCenter}>
@@ -225,10 +213,7 @@ export default function RecentlyDeletedScreen() {
           </Text>
           {deletedItems.length > 0 && (
             <Text
-              style={[
-                typography.footnote,
-                { color: colors.textSecondary, marginTop: 1 },
-              ]}
+              style={[typography.footnote, { color: colors.textSecondary, marginTop: 1 }]}
             >
               {deletedItems.length} item{deletedItems.length === 1 ? "" : "s"}
             </Text>
@@ -244,10 +229,7 @@ export default function RecentlyDeletedScreen() {
             style={[
               typography.body,
               {
-                color:
-                  deletedItems.length === 0
-                    ? colors.textTertiary
-                    : colors.accent,
+                color: deletedItems.length === 0 ? colors.textTertiary : colors.accent,
               },
             ]}
           >
@@ -258,11 +240,7 @@ export default function RecentlyDeletedScreen() {
 
       {deletedItems.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons
-            name="trash-outline"
-            size={56}
-            color={colors.textTertiary}
-          />
+          <Ionicons name="trash-outline" size={56} color={colors.textTertiary} />
           <Text
             style={[
               typography.title3,
@@ -302,10 +280,7 @@ export default function RecentlyDeletedScreen() {
           <GlassView
             intensity={80}
             bordered
-            style={[
-              styles.toolbar,
-              { paddingBottom: Math.max(insets.bottom, 12) },
-            ]}
+            style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}
           >
             {selecting ? (
               <>
@@ -336,9 +311,7 @@ export default function RecentlyDeletedScreen() {
                       style={[
                         typography.subhead,
                         {
-                          color: hasSelection
-                            ? colors.accent
-                            : colors.textTertiary,
+                          color: hasSelection ? colors.accent : colors.textTertiary,
                         },
                       ]}
                     >

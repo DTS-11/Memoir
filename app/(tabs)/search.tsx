@@ -50,9 +50,7 @@ export default function SearchScreen() {
       .filter((p) => {
         if (p.filename.toLowerCase().includes(q)) return true;
         const d = new Date(p.creationTime);
-        const monthName = d
-          .toLocaleString(undefined, { month: "long" })
-          .toLowerCase();
+        const monthName = d.toLocaleString(undefined, { month: "long" }).toLowerCase();
         if (monthName.includes(q)) return true;
         if (String(d.getFullYear()).includes(q)) return true;
         return false;
@@ -110,11 +108,7 @@ export default function SearchScreen() {
           />
           {query.length > 0 && (
             <Pressable onPress={() => setQuery("")} hitSlop={10}>
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={colors.textTertiary}
-              />
+              <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
             </Pressable>
           )}
         </View>
@@ -129,12 +123,7 @@ export default function SearchScreen() {
             >
               Categories
             </Text>
-            <View
-              style={[
-                styles.catList,
-                { backgroundColor: colors.surfaceElevated },
-              ]}
-            >
+            <View style={[styles.catList, { backgroundColor: colors.surfaceElevated }]}>
               {categoryCounts.map((c, i) => {
                 if (c.count === 0) return null;
                 return (
@@ -156,16 +145,11 @@ export default function SearchScreen() {
                     ]}
                   >
                     <View
-                      style={[
-                        styles.catIcon,
-                        { backgroundColor: colors.accentMuted },
-                      ]}
+                      style={[styles.catIcon, { backgroundColor: colors.accentMuted }]}
                     >
                       <Ionicons name={c.icon} size={18} color={colors.accent} />
                     </View>
-                    <Text
-                      style={[typography.body, { color: colors.text, flex: 1 }]}
-                    >
+                    <Text style={[typography.body, { color: colors.text, flex: 1 }]}>
                       {c.label}
                     </Text>
                     <Text

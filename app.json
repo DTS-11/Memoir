@@ -55,7 +55,13 @@
       "expo-font",
       "expo-video",
       "expo-sharing",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      "expo-sqlite",
+      "expo-asset"
+    ],
+    "assetBundlePatterns": [
+      "assets/**",
+      "assets/models/*"
     ],
     "experiments": {
       "typedRoutes": true

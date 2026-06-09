@@ -8,6 +8,7 @@ import { View } from "react-native";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { UpdateBanner } from "../src/components/UpdateBanner";
 import { PhotoLibraryProvider } from "../src/hooks/usePhotos";
+import { FaceProcessingProvider } from "../src/hooks/useFaceProcessing";
 
 SplashScreen.hideAsync().catch(() => {});
 
@@ -29,26 +30,15 @@ function Root() {
           name="photo/[id]"
           options={{ animation: "fade", presentation: "transparentModal" }}
         />
-        <Stack.Screen
-          name="album/[id]"
-          options={{ animation: "slide_from_right" }}
-        />
-        <Stack.Screen
-          name="category/[key]"
-          options={{ animation: "slide_from_right" }}
-        />
+        <Stack.Screen name="album/[id]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="category/[key]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen
           name="recently-deleted"
           options={{ animation: "slide_from_right" }}
         />
-        <Stack.Screen
-          name="favorites"
-          options={{ animation: "slide_from_right" }}
-        />
-        <Stack.Screen
-          name="archive"
-          options={{ animation: "slide_from_right" }}
-        />
+        <Stack.Screen name="favorites" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="archive" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="people/[id]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen
           name="permission"
           options={{ presentation: "transparentModal", animation: "fade" }}
@@ -64,7 +54,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <PhotoLibraryProvider>
-            <Root />
+            <FaceProcessingProvider>
+              <Root />
+            </FaceProcessingProvider>
           </PhotoLibraryProvider>
         </ThemeProvider>
       </SafeAreaProvider>

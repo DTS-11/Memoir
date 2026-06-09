@@ -13,7 +13,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -43,19 +43,11 @@ export default function PhotoViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const {
-    photos,
-    moveToRecentlyDeleted,
-    toggleFavorite,
-    favoriteIds,
-    archivePhoto,
-  } = usePhotos();
+  const { photos, moveToRecentlyDeleted, toggleFavorite, favoriteIds, archivePhoto } =
+    usePhotos();
   const listRef = useRef<FlatList<Photo>>(null);
 
-  const fallbackPhoto = useMemo(
-    () => photos.find((p) => p.id === id),
-    [id, photos],
-  );
+  const fallbackPhoto = useMemo(() => photos.find((p) => p.id === id), [id, photos]);
   const [directPhoto, setDirectPhoto] = useState<Photo | null>(null);
   const data =
     photos.length > 0
@@ -70,9 +62,10 @@ export default function PhotoViewer() {
     data.findIndex((p) => p.id === id),
   );
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [details, setDetails] = useState<AssetDetails | null>(
-    fallbackPhoto ?? null,
-  );
+  // Prevents the video effect from firing before the index-correction effect runs.
+  // Without this, currentIndex starts at 0 on mount and the wrong item auto-plays.
+  const indexReadyRef = useRef(photos.length > 0);
+  const [details, setDetails] = useState<AssetDetails | null>(fallbackPhoto ?? null);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [infoVisible, setInfoVisible] = useState(false);
   const [slideshowActive, setSlideshowActive] = useState(false);
@@ -97,16 +90,12 @@ export default function PhotoViewer() {
   const { isPlaying: videoPlaying } = useEvent(videoPlayer, "playingChange", {
     isPlaying: videoPlayer.playing,
   });
-  const { currentTime: videoCurrentTime } = useEvent(
-    videoPlayer,
-    "timeUpdate",
-    {
-      currentTime: 0,
-      bufferedPosition: 0,
-      currentLiveTimestamp: null,
-      currentOffsetFromLive: null,
-    },
-  );
+  const { currentTime: videoCurrentTime } = useEvent(videoPlayer, "timeUpdate", {
+    currentTime: 0,
+    bufferedPosition: 0,
+    currentLiveTimestamp: null,
+    currentOffsetFromLive: null,
+  });
   const { status: videoStatus } = useEvent(videoPlayer, "statusChange", {
     status: videoPlayer.status,
     error: undefined,
@@ -121,7 +110,7 @@ export default function PhotoViewer() {
   const isCurrentPlayable = isCurrentVideo || isCurrentAudio;
 
   const [videoDuration, setVideoDuration] = useState(0);
-  // Only check duration when status changes — avoids running 4×/s on every timeUpdate
+  // Tied to statusChange, not timeUpdate, to avoid running 4×/s
   useEffect(() => {
     const d = videoPlayer.duration;
     if (d > 0) setVideoDuration(d);
@@ -142,6 +131,7 @@ export default function PhotoViewer() {
       0,
       data.findIndex((p) => p.id === id),
     );
+    indexReadyRef.current = true;
     setCurrentIndex(index);
     requestAnimationFrame(() => {
       listRef.current?.scrollToIndex({ index, animated: false });
@@ -203,6 +193,7 @@ export default function PhotoViewer() {
   }, [current?.id, resetZoom]);
 
   useEffect(() => {
+    if (!indexReadyRef.current) return;
     if (
       (current?.mediaType === "video" || current?.mediaType === "audio") &&
       current.uri
@@ -215,6 +206,12 @@ export default function PhotoViewer() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, current?.mediaType]);
+
+  useEffect(() => {
+    return () => {
+      videoPlayer.pause();
+    };
+  }, [videoPlayer]);
 
   const toggleVideoPlayback = useCallback(() => {
     if (videoPlaying) {
@@ -350,10 +347,7 @@ export default function PhotoViewer() {
           if (scale.value > 1.02) {
             baseTx.value = tx.value;
             baseTy.value = ty.value;
-          } else if (
-            Math.abs(e.translationY) > 130 ||
-            Math.abs(e.velocityY) > 900
-          ) {
+          } else if (Math.abs(e.translationY) > 130 || Math.abs(e.velocityY) > 900) {
             overlayOpacity.value = withTiming(0, { duration: 160 });
             ty.value = withTiming(e.translationY > 0 ? height : -height, {
               duration: 190,
@@ -405,9 +399,7 @@ export default function PhotoViewer() {
     } else if (details?.localUri) {
       srcUri = details.localUri;
     } else {
-      const info = await MediaLibrary.getAssetInfoAsync(current.id).catch(
-        () => null,
-      );
+      const info = await MediaLibrary.getAssetInfoAsync(current.id).catch(() => null);
       srcUri = info?.localUri ?? current.uri ?? null;
     }
 
@@ -421,7 +413,6 @@ export default function PhotoViewer() {
 
     try {
       let shareUri = srcUri;
-      // expo-sharing on Android requires file:// — copy content:// to cache first
       if (Platform.OS === "android" && srcUri.startsWith("content://")) {
         const ext = current.filename.split(".").pop() ?? "jpg";
         const dest = `${FileSystem.cacheDirectory}share_${Date.now()}.${ext}`;
@@ -464,21 +455,17 @@ export default function PhotoViewer() {
   const deleteCurrent = useCallback(() => {
     if (!current) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      "Delete Photo?",
-      "The item will be moved to Recently Deleted.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            moveToRecentlyDeleted(current);
-            router.back();
-          },
+    Alert.alert("Delete Photo?", "The item will be moved to Recently Deleted.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          moveToRecentlyDeleted(current);
+          router.back();
         },
-      ],
-    );
+      },
+    ]);
   }, [current, moveToRecentlyDeleted]);
 
   const dateTitle = current
@@ -545,8 +532,7 @@ export default function PhotoViewer() {
                     ) : (
                       <Image
                         source={{
-                          uri:
-                            isCurrentItem && displayUri ? displayUri : item.uri,
+                          uri: isCurrentItem && displayUri ? displayUri : item.uri,
                         }}
                         style={{ width, height }}
                         contentFit="contain"
@@ -590,11 +576,7 @@ export default function PhotoViewer() {
           intensity={72}
           style={[styles.topBar, { paddingTop: insets.top + 8 }]}
         >
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={styles.iconBtn}
-          >
+          <Pressable onPress={goBack} hitSlop={12} style={styles.iconBtn}>
             <Ionicons name="chevron-back" size={28} color="#FFF" />
           </Pressable>
           <View style={styles.titleWrap}>
@@ -612,11 +594,7 @@ export default function PhotoViewer() {
               style={styles.iconBtn}
             >
               <Ionicons
-                name={
-                  slideshowActive
-                    ? "pause-circle-outline"
-                    : "play-circle-outline"
-                }
+                name={slideshowActive ? "pause-circle-outline" : "play-circle-outline"}
                 size={28}
                 color="#FFF"
               />
@@ -627,11 +605,7 @@ export default function PhotoViewer() {
             hitSlop={12}
             style={styles.iconBtn}
           >
-            <Ionicons
-              name="ellipsis-horizontal-circle"
-              size={28}
-              color="#FFF"
-            />
+            <Ionicons name="ellipsis-horizontal-circle" size={28} color="#FFF" />
           </Pressable>
         </GlassView>
       </Animated.View>
@@ -642,10 +616,7 @@ export default function PhotoViewer() {
       >
         {infoVisible && current && (
           <GlassView intensity={72} style={styles.infoPanel}>
-            <InfoRow
-              label="File"
-              value={details?.filename || current.filename}
-            />
+            <InfoRow label="File" value={details?.filename || current.filename} />
             <InfoRow
               label="Size"
               value={`${details?.width || current.width} × ${details?.height || current.height}`}
@@ -702,11 +673,7 @@ export default function PhotoViewer() {
               hitSlop={12}
               style={styles.videoPlayBtn}
             >
-              <Ionicons
-                name={videoPlaying ? "pause" : "play"}
-                size={26}
-                color="#FFF"
-              />
+              <Ionicons name={videoPlaying ? "pause" : "play"} size={26} color="#FFF" />
             </Pressable>
             <VideoScrubber
               currentTime={videoCurrentTime}
@@ -721,27 +688,16 @@ export default function PhotoViewer() {
         <GlassView
           interactive
           intensity={72}
-          style={[
-            styles.bottomBar,
-            { paddingBottom: Math.max(insets.bottom, 12) },
-          ]}
+          style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}
         >
-          <ActionBtn
-            icon="share-outline"
-            label="Share"
-            onPress={shareCurrent}
-          />
+          <ActionBtn icon="share-outline" label="Share" onPress={shareCurrent} />
           <ActionBtn
             icon={isFavorite ? "heart" : "heart-outline"}
             label="Favorite"
             onPress={handleToggleFavorite}
             active={isFavorite}
           />
-          <ActionBtn
-            icon="archive-outline"
-            label="Archive"
-            onPress={handleArchive}
-          />
+          <ActionBtn icon="archive-outline" label="Archive" onPress={handleArchive} />
           <ActionBtn
             icon="trash-outline"
             label="Delete"
@@ -767,11 +723,7 @@ function ActionBtn({
   active?: boolean;
   destructive?: boolean;
 }) {
-  const color = destructive
-    ? semantic.delete
-    : active
-      ? semantic.favorite
-      : "#FFF";
+  const color = destructive ? semantic.delete : active ? semantic.favorite : "#FFF";
   return (
     <Pressable
       hitSlop={10}
@@ -802,20 +754,13 @@ function InfoRow({
         {value}
       </Text>
       {onPress && (
-        <Ionicons
-          name="open-outline"
-          size={13}
-          color="rgba(255,255,255,0.45)"
-        />
+        <Ionicons name="open-outline" size={13} color="rgba(255,255,255,0.45)" />
       )}
     </View>
   );
   if (onPress) {
     return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => pressed && { opacity: 0.65 }}
-      >
+      <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.65 }}>
         {row}
       </Pressable>
     );
@@ -1052,7 +997,6 @@ function mimeTypeFor(filename: string, mediaType: string): string {
     };
     return map[ext] ?? "audio/mpeg";
   }
-  // photo / unknown
   const map: Record<string, string> = {
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
@@ -1095,8 +1039,7 @@ function VideoScrubber({
 
   useEffect(() => {
     if (!isDragging.value && barWidth.value > 0 && duration > 0) {
-      thumbX.value =
-        (Math.min(currentTime, duration) / duration) * barWidth.value;
+      thumbX.value = (Math.min(currentTime, duration) / duration) * barWidth.value;
     }
   }, [currentTime, duration, barWidth, isDragging, thumbX]);
 
@@ -1129,10 +1072,7 @@ function VideoScrubber({
   }));
 
   const thumbStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: thumbX.value - 6.5 },
-      { scale: thumbScale.value },
-    ],
+    transform: [{ translateX: thumbX.value - 6.5 }, { scale: thumbScale.value }],
   }));
 
   return (

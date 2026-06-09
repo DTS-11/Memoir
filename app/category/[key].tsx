@@ -65,11 +65,7 @@ export default function CategoryScreen() {
           subtitle={`${filtered.length.toLocaleString()} item${filtered.length === 1 ? "" : "s"}`}
           right={
             <Pressable onPress={() => router.back()} hitSlop={10}>
-              <Ionicons
-                name="chevron-back-circle"
-                size={28}
-                color={colors.accent}
-              />
+              <Ionicons name="chevron-back-circle" size={28} color={colors.accent} />
             </Pressable>
           }
         />

@@ -30,10 +30,7 @@ export function TopGlassBar({
     >
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          <Text
-            style={[styles.title, { color: colors.text }]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
             {title}
           </Text>
           {!!subtitle && (

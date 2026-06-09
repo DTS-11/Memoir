@@ -29,6 +29,16 @@ github-secrets-to-upload.txt
 # Metro
 .metro-health-check*
 
+# IDE
+.idea/
+
+# npm lockfile (project uses bun)
+package-lock.json
+
+# ML model binaries — download instructions in assets/models/README.md
+assets/models/*.onnx
+assets/models/*.onnx.data
+
 # debug
 npm-debug.*
 yarn-debug.*
