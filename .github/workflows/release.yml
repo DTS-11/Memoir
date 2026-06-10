@@ -86,6 +86,9 @@ jobs:
       - name: Run Expo prebuild (Android)
         run: bunx expo prebuild --platform android --clean --no-install
 
+      - name: Increase Gradle JVM heap for CI
+        run: sed -i 's/-Xmx[0-9]*m/-Xmx4096m/g' android/gradle.properties
+
       - name: Decode release keystore and detect alias
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -134,7 +137,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ env.DETECTED_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
       - name: Stage APK
         run: |
