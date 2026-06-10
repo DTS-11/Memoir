@@ -1,0 +1,18 @@
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt b/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt
+index cfc300c..79921d5 100644
+--- a/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt
+@@ -97,6 +97,13 @@ internal fun Project.applyPublishing(expoModulesExtension: ExpoModuleExtension)
+     .applyPublishingVariant()
+
+   afterEvaluate {
++    // Gradle 9 + evaluationDependsOn can fire afterEvaluate before AGP creates the 'release'
++    // SoftwareComponent. Guard against this to avoid UnknownDomainObjectException.
++    if (components.findByName("release") == null) {
++      createEmptyExpoPublishTask()
++      createEmptyExpoPublishToMavenLocalTask()
++      return@afterEvaluate
++    }
+     val publicationInfo = PublicationInfo(this)
+
+     publishingExtension()
