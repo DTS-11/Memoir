@@ -35,6 +35,7 @@ import { FastScrollBar } from "../../src/components/FastScrollBar";
 import {
   buildGrid,
   computeSectionOffsets,
+  photoIndexFromTouch,
   DEFAULT_FAMILY,
   FAMILY_COLUMNS,
   zoomInFamily,
@@ -94,6 +95,11 @@ export default function Library() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sectionTitle, setSectionTitle] = useState<string | null>(null);
   const [sectionSub, setSectionSub] = useState<string | undefined>();
+
+  // Refs kept in sync for use inside gesture worklet callbacks
+  const scrollYRef = useRef(0);
+  const dragAnchorIndexRef = useRef(-1);
+  const lastDragIndexRef = useRef(-1);
 
   const gridRef = useRef<FlashListRef<GridItem> | null>(null);
   const toolbarOffset = useSharedValue(TOOLBAR_HEIGHT + 20);
@@ -211,6 +217,85 @@ export default function Library() {
       if (!inSelectModeRef.current) enterSelectMode(photo);
     },
     [enterSelectMode],
+  );
+
+  // Stable refs for use inside gesture callbacks (avoid stale closures)
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  const gridItemsRef = useRef<typeof gridItems>([] as typeof gridItems);
+  const columnsRef = useRef(0);
+  const tileSizeRef = useRef(0);
+  const headerHeightRef = useRef(0);
+
+  const handleDragStart = useCallback((absX: number, absY: number) => {
+    const idx = photoIndexFromTouch(
+      absX,
+      absY,
+      scrollYRef.current,
+      gridItemsRef.current,
+      tileSizeRef.current,
+      columnsRef.current,
+      headerHeightRef.current,
+    );
+    const photo = photosRef.current[idx];
+    if (!photo) return;
+    dragAnchorIndexRef.current = idx;
+    lastDragIndexRef.current = idx;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.add(photo.id);
+      return next;
+    });
+  }, []);
+
+  const handleDragMove = useCallback((absX: number, absY: number) => {
+    const anchor = dragAnchorIndexRef.current;
+    if (anchor < 0) return;
+    const idx = photoIndexFromTouch(
+      absX,
+      absY,
+      scrollYRef.current,
+      gridItemsRef.current,
+      tileSizeRef.current,
+      columnsRef.current,
+      headerHeightRef.current,
+    );
+    if (idx === lastDragIndexRef.current) return;
+    lastDragIndexRef.current = idx;
+    Haptics.selectionAsync();
+    const ps = photosRef.current;
+    const lo = Math.min(anchor, idx);
+    const hi = Math.max(anchor, idx);
+    const next = new Set<string>();
+    for (let i = lo; i <= hi && i < ps.length; i++) next.add(ps[i].id);
+    setSelectedIds(next);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    dragAnchorIndexRef.current = -1;
+    lastDragIndexRef.current = -1;
+  }, []);
+
+  const dragSelect = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(inSelectMode)
+        .minDistance(0)
+        .onStart((e) => {
+          runOnJS(handleDragStart)(e.absoluteX, e.absoluteY);
+        })
+        .onUpdate((e) => {
+          runOnJS(handleDragMove)(e.absoluteX, e.absoluteY);
+        })
+        .onEnd(() => {
+          runOnJS(handleDragEnd)();
+        }),
+    [inSelectMode, handleDragStart, handleDragMove, handleDragEnd],
+  );
+
+  const composed = useMemo(
+    () => Gesture.Simultaneous(pinch, dragSelect),
+    [pinch, dragSelect],
   );
 
   const onPressPhoto = useCallback((p: Photo) => {
@@ -331,6 +416,7 @@ export default function Library() {
 
   const handleScrollY = useCallback(
     (y: number) => {
+      scrollYRef.current = y;
       const maxY = Math.max(1, contentHeightRef.current - height);
       scrollFraction.value = Math.max(0, Math.min(1, y / maxY));
     },
@@ -345,6 +431,12 @@ export default function Library() {
   const tileSize = width / columns;
 
   const gridItems = useMemo(() => buildGrid(photos, family), [photos, family]);
+
+  // Keep refs in sync so drag gesture callbacks always see fresh values
+  gridItemsRef.current = gridItems;
+  columnsRef.current = columns;
+  tileSizeRef.current = tileSize;
+  headerHeightRef.current = headerHeight;
 
   const sections = useMemo(
     () => computeSectionOffsets(gridItems, columns, tileSize, headerHeight),
@@ -403,7 +495,7 @@ export default function Library() {
 
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
-      <GestureDetector gesture={pinch}>
+      <GestureDetector gesture={composed}>
         <Animated.View style={[styles.fill, gridAnimStyle]}>
           <PhotoGrid
             listRef={gridRef}
@@ -420,6 +512,7 @@ export default function Library() {
             selectedIds={selectedIds}
             favoriteIds={favoriteIds}
             inSelectMode={inSelectMode}
+            scrollEnabled={!inSelectMode}
             onSectionChange={handleSectionChange}
             onScrollY={handleScrollY}
             onContentHeight={handleContentHeight}

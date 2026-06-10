@@ -34,18 +34,37 @@ async function smartAlbumByMediaSubtype(
   match: (a: MediaLibrary.Asset) => boolean,
 ): Promise<AlbumPreview | null> {
   try {
+    // Use first: 0 to get totalCount without fetching all assets
     const res = await MediaLibrary.getAssetsAsync({
       mediaType: ["photo", "video"],
-      first: 500,
+      first: 1,
       sortBy: [[MediaLibrary.SortBy.creationTime, false]],
     });
-    const filtered = res.assets.filter(match);
-    if (filtered.length === 0) return null;
+    const totalAssets = res.totalCount;
+    if (totalAssets === 0) return null;
+
+    // Page through assets to apply the custom match function
+    const matched: MediaLibrary.Asset[] = [];
+    let after: string | undefined;
+    for (let pages = 0; pages < 20; pages++) {
+      const page = await MediaLibrary.getAssetsAsync({
+        mediaType: ["photo", "video"],
+        first: 500,
+        after,
+        sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      });
+      for (const a of page.assets) {
+        if (match(a)) matched.push(a);
+      }
+      if (!page.hasNextPage) break;
+      after = page.endCursor;
+    }
+    if (matched.length === 0) return null;
     return {
       id: `smart:${title}`,
       title,
-      count: filtered.length,
-      coverUri: filtered[0].uri,
+      count: matched.length,
+      coverUri: matched[0].uri,
       type: "smart",
     };
   } catch {
@@ -70,7 +89,10 @@ export function useAlbums(enabled: boolean) {
 
       const [videos, recents] = await Promise.all([
         smartAlbumByMediaSubtype("Videos", (a) => a.mediaType === "video"),
-        smartAlbumByMediaSubtype("Recents", () => true),
+        smartAlbumByMediaSubtype(
+          "Recents",
+          (a) => a.creationTime > Date.now() - 30 * 24 * 60 * 60 * 1000,
+        ),
       ]);
       setSmart([recents, videos].filter(Boolean) as AlbumPreview[]);
     } finally {

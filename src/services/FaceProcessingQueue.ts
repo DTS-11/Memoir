@@ -104,8 +104,8 @@ export async function runFaceScan(
       processed += batch.length;
       onProgress({ processed, total, status: "scanning", newFaces });
 
-      // Recluster incrementally so people appear while scanning continues
-      if (newFaces > 0 && newFaces % RECLUSTER_EVERY < BATCH) {
+      // Recluster every RECLUSTER_EVERY new faces so people appear while scanning continues
+      if (newFaces > 0 && newFaces % RECLUSTER_EVERY === 0) {
         await runClustering();
       }
 

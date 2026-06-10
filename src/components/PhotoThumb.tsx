@@ -98,20 +98,30 @@ function PhotoThumbImpl({
         {selected && <View style={styles.selectedDim} />}
         {selected && <View style={[styles.selectionRing, { borderRadius: radius }]} />}
 
-        {(isVideo || isAudio) && photo.duration > 0 && (
+        {isVideo && (
           <View style={styles.durationBadge}>
-            {isVideo && (
-              <Ionicons name="play" size={9} color="#FFF" style={{ marginRight: 2 }} />
+            <Ionicons
+              name="play-sharp"
+              size={9}
+              color="#FFF"
+              style={photo.duration > 0 ? { marginRight: 3 } : undefined}
+            />
+            {photo.duration > 0 && (
+              <Text style={styles.durationText}>{formatDuration(photo.duration)}</Text>
             )}
-            {isAudio && (
-              <Ionicons
-                name="musical-note"
-                size={9}
-                color="#FFF"
-                style={{ marginRight: 2 }}
-              />
+          </View>
+        )}
+        {isAudio && (
+          <View style={styles.durationBadge}>
+            <Ionicons
+              name="musical-note"
+              size={9}
+              color="#FFF"
+              style={photo.duration > 0 ? { marginRight: 3 } : undefined}
+            />
+            {photo.duration > 0 && (
+              <Text style={styles.durationText}>{formatDuration(photo.duration)}</Text>
             )}
-            <Text style={styles.durationText}>{formatDuration(photo.duration)}</Text>
           </View>
         )}
 
@@ -185,7 +195,7 @@ const styles = StyleSheet.create({
   durationBadge: {
     position: "absolute",
     bottom: 4,
-    right: 6,
+    left: 4,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 5,
@@ -202,7 +212,7 @@ const styles = StyleSheet.create({
   favBadge: {
     position: "absolute",
     bottom: 5,
-    left: 5,
+    right: 5,
     width: 18,
     height: 18,
     borderRadius: 9,

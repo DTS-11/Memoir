@@ -16,7 +16,7 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as MediaLibrary from "expo-media-library/legacy";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -71,8 +71,8 @@ export default function PhotoViewer() {
   const [slideshowActive, setSlideshowActive] = useState(false);
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const SLIDESHOW_INTERVAL_MS = 3000;
-  const chromeVisibleRef = useRef(chromeVisible);
-  chromeVisibleRef.current = chromeVisible;
+  const chromeVisibleSV = useSharedValue(chromeVisible);
+  chromeVisibleSV.value = chromeVisible;
 
   const scale = useSharedValue(1);
   const baseScale = useSharedValue(1);
@@ -209,9 +209,22 @@ export default function PhotoViewer() {
 
   useEffect(() => {
     return () => {
-      videoPlayer.pause();
+      try {
+        videoPlayer.pause();
+      } catch {}
     };
   }, [videoPlayer]);
+
+  // Pause when navigating away (handles system back gesture, not just the button)
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        try {
+          videoPlayer.pause();
+        } catch {}
+      };
+    }, [videoPlayer]),
+  );
 
   const toggleVideoPlayback = useCallback(() => {
     if (videoPlaying) {
@@ -254,11 +267,11 @@ export default function PhotoViewer() {
   const startSlideshow = useCallback(() => {
     setSlideshowActive(true);
     setChrome(false);
-    const id = setInterval(() => {
+    const intervalId = setInterval(() => {
       setCurrentIndex((prev) => {
         const next = prev + 1;
         if (next >= dataLengthRef.current) {
-          clearInterval(id);
+          clearInterval(intervalId);
           slideshowRef.current = null;
           setSlideshowActive(false);
           return prev;
@@ -267,7 +280,7 @@ export default function PhotoViewer() {
         return next;
       });
     }, SLIDESHOW_INTERVAL_MS);
-    slideshowRef.current = id;
+    slideshowRef.current = intervalId;
   }, [setChrome]);
 
   useEffect(() => {
@@ -277,7 +290,9 @@ export default function PhotoViewer() {
   }, []);
 
   const goBack = useCallback(() => {
-    videoPlayer.pause();
+    try {
+      videoPlayer.pause();
+    } catch {}
     router.back();
   }, [videoPlayer]);
 
@@ -286,9 +301,9 @@ export default function PhotoViewer() {
       Gesture.Tap()
         .numberOfTaps(1)
         .onEnd(() => {
-          runOnJS(setChrome)(!chromeVisibleRef.current);
+          runOnJS(setChrome)(!chromeVisibleSV.value);
         }),
-    [setChrome],
+    [setChrome, chromeVisibleSV],
   );
 
   const doubleTap = useMemo(

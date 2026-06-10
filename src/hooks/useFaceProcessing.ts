@@ -44,8 +44,7 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     FaceDb.init().catch(() => {});
     // Pre-warm the ONNX model so the first scan starts faster
-    preloadModel();
-    setModelReady(true);
+    preloadModel().then(() => setModelReady(true));
   }, []);
 
   const startScan = useCallback((photos: Photo[]) => {

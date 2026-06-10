@@ -1,4 +1,5 @@
 import "react-native-gesture-handler";
+import { useEffect } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -10,10 +11,13 @@ import { UpdateBanner } from "../src/components/UpdateBanner";
 import { PhotoLibraryProvider } from "../src/hooks/usePhotos";
 import { FaceProcessingProvider } from "../src/hooks/useFaceProcessing";
 
-SplashScreen.hideAsync().catch(() => {});
-
 function Root() {
   const { colors, isDark } = useTheme();
+
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? "light" : "dark"} />

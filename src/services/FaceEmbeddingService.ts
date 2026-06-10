@@ -27,6 +27,19 @@ async function loadSession(): Promise<InferenceSession> {
       require("../../assets/models/facenet.onnx"),
     );
     if (!asset.localUri) throw new Error("Model asset has no local URI");
+
+    // The model is a split ONNX (header + external .onnx.data). If only the
+    // header was bundled (< 5 MB) ONNX Runtime will crash natively trying to
+    // read the missing weight file — catch it here before we ever call create().
+    const info = await FileSystem.getInfoAsync(asset.localUri);
+    const fileSize = (info as { size?: number }).size ?? 0;
+    if (!info.exists || fileSize < 5_000_000) {
+      throw new Error(
+        "facenet.onnx is header-only (external data not bundled). " +
+          "Re-run convert_facenet.py with the inline flag to produce a single-file model.",
+      );
+    }
+
     const s = await InferenceSession.create(asset.localUri);
     session = s;
     return s;
@@ -35,9 +48,11 @@ async function loadSession(): Promise<InferenceSession> {
   return sessionPromise;
 }
 
-/** Kick off model loading without blocking the caller. */
-export function preloadModel(): void {
-  loadSession().catch(() => {});
+/** Kick off model loading without blocking the caller. Returns a promise that resolves once the model is ready. */
+export function preloadModel(): Promise<void> {
+  return loadSession()
+    .then(() => {})
+    .catch(() => {});
 }
 
 // ── Thumb directory ───────────────────────────────────────────────────────────

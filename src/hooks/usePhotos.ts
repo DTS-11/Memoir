@@ -79,6 +79,24 @@ function parseFilenameTimestamp(filename: string): number {
   return 0;
 }
 
+/**
+ * Stable fallback timestamp for SAF files whose filenames carry no date.
+ * Hashing the URI produces a value that won't change between app launches
+ * (unlike Date.now()), so the file sorts consistently in the library.
+ * The result is mapped to a plausible range (2010-2020) so it doesn't
+ * appear at the very top or very bottom of the chronological list.
+ */
+function stableTimestampFromUri(uri: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < uri.length; i++) {
+    h ^= uri.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  const RANGE_START = new Date(2010, 0, 1).getTime();
+  const RANGE_END = new Date(2020, 0, 1).getTime();
+  return RANGE_START + (Math.abs(h) % (RANGE_END - RANGE_START));
+}
+
 async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
   if (depth > 7) return [];
   let entries: string[];
@@ -98,7 +116,7 @@ async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
         uri: entry,
         width: 0,
         height: 0,
-        creationTime: parseFilenameTimestamp(filename) || Date.now(),
+        creationTime: parseFilenameTimestamp(filename) || stableTimestampFromUri(entry),
         duration: 0,
         mediaType: VIDEO_EXTS.test(filename) ? "video" : "photo",
         filename,
@@ -491,7 +509,7 @@ function usePhotosController() {
       deletedItems,
       loading,
       hasMore,
-      totalCount: totalCount + safPhotos.length,
+      totalCount: allRaw.length,
       safNeedsPermission,
       requestSafAccess,
       dismissSafPermission,
@@ -520,8 +538,7 @@ function usePhotosController() {
       deletedItems,
       loading,
       hasMore,
-      totalCount,
-      safPhotos.length,
+      allRaw.length,
       safNeedsPermission,
       requestSafAccess,
       dismissSafPermission,

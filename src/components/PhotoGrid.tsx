@@ -32,6 +32,7 @@ type Props = {
   selectedIds?: Set<string>;
   favoriteIds?: Set<string>;
   inSelectMode?: boolean;
+  scrollEnabled?: boolean;
   /** Called when the topmost visible section changes while scrolling. */
   onSectionChange?: (title: string, subtitle?: string) => void;
   /** Called with the current scroll Y offset (throttled to ~60 fps). */
@@ -74,6 +75,7 @@ export function PhotoGrid({
   selectedIds,
   favoriteIds,
   inSelectMode = false,
+  scrollEnabled = true,
   onSectionChange,
   onScrollY,
   onContentHeight,
@@ -239,6 +241,7 @@ export function PhotoGrid({
       onScroll={handleScroll}
       scrollEventThrottle={16}
       onContentSizeChange={handleContentSizeChange}
+      scrollEnabled={scrollEnabled}
     />
   );
 }

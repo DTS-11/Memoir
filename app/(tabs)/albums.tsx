@@ -1,7 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  LayoutAnimation,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -51,6 +49,9 @@ const MONTH_NAMES = [
 function buildMemories(photos: Photo[]): Memory[] {
   const byMonth = new Map<string, Photo[]>();
   for (const p of photos) {
+    // SAF files get Date.now() as their timestamp when the filename has no
+    // parseable date — skip them so memory dates don't drift day-to-day.
+    if (p.id.startsWith("saf:")) continue;
     const d = new Date(p.creationTime);
     const k = `${d.getFullYear()}-${d.getMonth()}`;
     const arr = byMonth.get(k) ?? [];
@@ -62,11 +63,14 @@ function buildMemories(photos: Photo[]): Memory[] {
     .slice(0, 6)
     .map(([key, arr]) => {
       const [year, month] = key.split("-").map(Number);
+      // Prefer a photo as the cover — videos render as black thumbnails in expo-image.
+      const cover = arr.find((p) => p.mediaType === "photo") ?? arr[0];
+      const ordered = [cover, ...arr.filter((p) => p !== cover)];
       return {
         id: key,
         title: `${MONTH_NAMES[month]} ${year}`,
-        subtitle: `${arr.length} photos`,
-        photos: arr,
+        subtitle: `${arr.length} item${arr.length === 1 ? "" : "s"}`,
+        photos: ordered,
       };
     });
 }
@@ -119,7 +123,6 @@ export default function BrowseScreen() {
     query.length > 0 || activeMedia.size > 0 || activeDates.size > 0;
 
   const toggleAlbums = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setAlbumsExpanded((v) => !v);
   }, []);
   const scrollRef = useRef<ScrollView>(null);

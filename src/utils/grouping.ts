@@ -58,13 +58,57 @@ const dayFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 // Approximate height of a section header row (paddingTop + text + paddingBottom)
-const HEADER_H = 54;
+export const HEADER_H = 54;
 
 /**
  * Returns approximate scroll-Y for each section header so the fast scrollbar
  * can snap to month/year boundaries and show a date label while dragging.
  * Values are estimates — headers have slightly variable height — but close enough.
  */
+/**
+ * Given an absolute touch position and the current scroll offset, returns
+ * the index into the `photos` array (headers excluded) that the finger is over.
+ * Used for long-press drag-to-select on the photo grid.
+ */
+export function photoIndexFromTouch(
+  absX: number,
+  absY: number,
+  scrollY: number,
+  items: GridItem[],
+  tileSize: number,
+  columns: number,
+  contentTopPadding: number,
+): number {
+  const col = Math.max(0, Math.min(columns - 1, Math.floor(absX / tileSize)));
+  const contentY = absY + scrollY - contentTopPadding;
+  if (contentY < 0) return 0;
+
+  let y = 0;
+  let photoIdx = 0;
+  let i = 0;
+
+  while (i < items.length) {
+    const item = items[i];
+    if (item.type === "header") {
+      if (contentY < y + HEADER_H) return photoIdx;
+      y += HEADER_H;
+      i++;
+    } else {
+      let count = 0;
+      while (i + count < items.length && items[i + count].type === "photo") count++;
+      const rowHeight = Math.ceil(count / columns) * tileSize;
+      if (contentY < y + rowHeight) {
+        const row = Math.floor((contentY - y) / tileSize);
+        return photoIdx + Math.min(row * columns + col, count - 1);
+      }
+      y += rowHeight;
+      photoIdx += count;
+      i += count;
+    }
+  }
+  return Math.max(0, photoIdx - 1);
+}
+
 export function computeSectionOffsets(
   items: GridItem[],
   columns: number,

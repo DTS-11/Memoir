@@ -47,7 +47,7 @@ export const PersonCard = memo(function PersonCard({ person, onPress }: Props) {
       </Text>
 
       <Text style={[typography.caption2, { color: colors.textSecondary }]}>
-        {person.face_count}
+        {person.photoIds.length}
       </Text>
     </Pressable>
   );
