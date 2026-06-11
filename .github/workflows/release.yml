@@ -128,6 +128,22 @@ jobs:
       - name: Patch build.gradle with release signing config
         run: node scripts/patch-android-signing.mjs
 
+      - name: Download FaceNet model
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download models \
+            --pattern 'facenet.onnx' \
+            --dir assets/models/ \
+            --repo "${{ github.repository }}" \
+            --clobber
+          size=$(stat -c%s assets/models/facenet.onnx 2>/dev/null || echo 0)
+          if [ "$size" -lt 5000000 ]; then
+            echo "::warning::facenet.onnx is header-only (${size} bytes). Face recognition will be disabled in this build."
+          else
+            echo "facenet.onnx downloaded: ${size} bytes"
+          fi
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
