@@ -3,7 +3,7 @@
     "name": "Memoir",
     "slug": "memoir",
     "scheme": "memoir",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "orientation": "portrait",
     "icon": "./assets/memoir_logo.png",
     "userInterfaceStyle": "automatic",
