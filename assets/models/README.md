@@ -1,4 +1,24 @@
-# FaceNet ONNX Model
+# ONNX Models
+
+Two models are required. Run the scripts below once, then build.
+
+## ultraface.onnx — face detection (~1.3 MB, commit to git)
+
+```bash
+python assets/models/download_ultraface.py
+```
+
+| Property    | Value                              |
+|-------------|------------------------------------|
+| Input       | `[1, 3, 240, 320]` NCHW float32   |
+| Normalise   | `(pixel − 127) / 128`             |
+| Output[0]   | `scores` `[1, 4420, 2]`           |
+| Output[1]   | `boxes`  `[1, 4420, 4]` — x1 y1 x2 y2 normalised 0–1 |
+| Source      | ONNX Model Zoo — version-RFB-320  |
+
+---
+
+## facenet.onnx — face embeddings (~90 MB, do NOT commit)
 
 Place your `facenet.onnx` file in this directory before building.
 

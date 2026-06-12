@@ -18,6 +18,7 @@ import {
 } from "../services/FaceProcessingQueue";
 import { FaceDb } from "../db/faceDb";
 import { preloadModel } from "../services/FaceEmbeddingService";
+import { preloadDetector } from "../services/FaceDetectionService";
 import type { Photo } from "./usePhotos";
 
 type FaceProcessingCtx = {
@@ -43,8 +44,8 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     FaceDb.init().catch(() => {});
-    // Pre-warm the ONNX model so the first scan starts faster
-    preloadModel().then(() => setModelReady(true));
+    // Pre-warm both ONNX models so the first scan starts faster
+    Promise.all([preloadModel(), preloadDetector()]).then(() => setModelReady(true));
   }, []);
 
   const startScan = useCallback((photos: Photo[]) => {

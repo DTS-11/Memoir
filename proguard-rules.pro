@@ -1,0 +1,4 @@
+-keep class ai.onnxruntime.** { *; }
+-keep class com.google.mlkit.** { *; }
+-keep class com.microsoft.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
