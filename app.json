@@ -34,7 +34,12 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {
@@ -49,7 +54,9 @@
           "android": {
             "minSdkVersion": 26,
             "ndkVersion": "27.1.12297006",
-            "abiFilters": ["arm64-v8a"],
+            "abiFilters": [
+              "arm64-v8a"
+            ],
             "enableProguardInReleaseBuilds": true,
             "proguardRules": "./proguard-rules.pro",
             "packagingOptions": {
@@ -57,7 +64,8 @@
                 "lib/arm64-v8a/libc++_shared.so",
                 "lib/x86_64/libc++_shared.so"
               ]
-            }
+            },
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ],
@@ -77,9 +85,18 @@
       "expo-sqlite",
       "expo-asset"
     ],
-    "assetBundlePatterns": ["assets/**", "assets/models/*"],
+    "assetBundlePatterns": [
+      "assets/**",
+      "assets/models/*"
+    ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "92e3da19-b67b-4b43-b762-0ce1a3c74ba7"
+      }
     }
   }
 }
