@@ -10,6 +10,7 @@ import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { UpdateBanner } from "../src/components/UpdateBanner";
 import { PhotoLibraryProvider } from "../src/hooks/usePhotos";
 import { FaceProcessingProvider } from "../src/hooks/useFaceProcessing";
+import { ErrorBoundary } from "../src/components/ErrorBoundary";
 
 function Root() {
   const { colors, isDark } = useTheme();
@@ -54,16 +55,18 @@ function Root() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <PhotoLibraryProvider>
-            <FaceProcessingProvider>
-              <Root />
-            </FaceProcessingProvider>
-          </PhotoLibraryProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <PhotoLibraryProvider>
+              <FaceProcessingProvider>
+                <Root />
+              </FaceProcessingProvider>
+            </PhotoLibraryProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
