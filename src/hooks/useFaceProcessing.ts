@@ -17,8 +17,6 @@ import {
   type ScanProgress,
 } from "../services/FaceProcessingQueue";
 import { FaceDb } from "../db/faceDb";
-import { preloadModel } from "../services/FaceEmbeddingService";
-import { preloadDetector } from "../services/FaceDetectionService";
 import type { Photo } from "./usePhotos";
 
 type FaceProcessingCtx = {
@@ -27,7 +25,6 @@ type FaceProcessingCtx = {
   stopScan: () => void;
   recluster: () => Promise<void>;
   resetAndRescan: (photos: Photo[]) => Promise<void>;
-  modelReady: boolean;
 };
 
 const Ctx = createContext<FaceProcessingCtx | null>(null);
@@ -39,13 +36,10 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
     status: "idle",
     newFaces: 0,
   });
-  const [modelReady, setModelReady] = useState(false);
   const photosRef = useRef<Photo[]>([]);
 
   useEffect(() => {
     FaceDb.init().catch(() => {});
-    // Pre-warm both ONNX models so the first scan starts faster
-    Promise.all([preloadModel(), preloadDetector()]).then(() => setModelReady(true));
   }, []);
 
   const startScan = useCallback((photos: Photo[]) => {
@@ -75,8 +69,8 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ progress, startScan, stopScan, recluster, resetAndRescan, modelReady }),
-    [progress, startScan, stopScan, recluster, resetAndRescan, modelReady],
+    () => ({ progress, startScan, stopScan, recluster, resetAndRescan }),
+    [progress, startScan, stopScan, recluster, resetAndRescan],
   );
 
   return createElement(Ctx.Provider, { value }, children);

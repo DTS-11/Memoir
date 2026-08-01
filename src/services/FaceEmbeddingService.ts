@@ -1,7 +1,7 @@
 import { Asset } from "expo-asset";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
-import { InferenceSession, Tensor } from "onnxruntime-react-native";
+import type { InferenceSession, Tensor } from "onnxruntime-react-native";
 import jpeg from "jpeg-js";
 import type { DetectedFace } from "./FaceDetectionService";
 
@@ -16,6 +16,19 @@ const MODEL_INPUT_SIZE = 160;
 // ── Singleton session ─────────────────────────────────────────────────────────
 let session: InferenceSession | null = null;
 let sessionPromise: Promise<InferenceSession> | null = null;
+
+// onnxruntime-react-native runs a synchronous JSI install() at import time and
+// loads large models when InferenceSession.create() is called. Importing it at
+// module load would do this native work during app startup (before React
+// mounts), which can hard-crash on-device. Load it lazily, only when a face
+// scan actually runs.
+let _ort: typeof import("onnxruntime-react-native") | null = null;
+function getOrt(): typeof import("onnxruntime-react-native") {
+  if (_ort) return _ort;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  _ort = require("onnxruntime-react-native") as typeof import("onnxruntime-react-native");
+  return _ort;
+}
 
 async function loadSession(): Promise<InferenceSession> {
   if (session) return session;
@@ -40,6 +53,7 @@ async function loadSession(): Promise<InferenceSession> {
       );
     }
 
+    const { InferenceSession } = getOrt();
     const s = await InferenceSession.create(asset.localUri);
     session = s;
     return s;
@@ -127,6 +141,7 @@ export async function getEmbedding(
   faceId: string,
 ): Promise<EmbeddingResult> {
   try {
+    const { Tensor } = getOrt();
     const { x, y, width, height } = face.bounds;
 
     // 20 % padding around the face for better embedding quality

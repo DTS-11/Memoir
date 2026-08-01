@@ -1,6 +1,6 @@
 import { Asset } from "expo-asset";
 import * as ImageManipulator from "expo-image-manipulator";
-import { InferenceSession, Tensor } from "onnxruntime-react-native";
+import type { InferenceSession, Tensor } from "onnxruntime-react-native";
 import { Image } from "react-native";
 import jpeg from "jpeg-js";
 
@@ -21,6 +21,19 @@ export type DetectedFace = {
 let _session: InferenceSession | null = null;
 let _sessionPromise: Promise<InferenceSession> | null = null;
 
+// onnxruntime-react-native runs a synchronous JSI install() at import time and
+// loads large models when InferenceSession.create() is called. Importing it at
+// module load would do this native work during app startup (before React
+// mounts), which can hard-crash on-device. Load it lazily, only when a face
+// scan actually runs.
+let _ort: typeof import("onnxruntime-react-native") | null = null;
+function getOrt(): typeof import("onnxruntime-react-native") {
+  if (_ort) return _ort;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  _ort = require("onnxruntime-react-native") as typeof import("onnxruntime-react-native");
+  return _ort;
+}
+
 async function loadSession(): Promise<InferenceSession> {
   if (_session) return _session;
   if (_sessionPromise) return _sessionPromise;
@@ -30,6 +43,7 @@ async function loadSession(): Promise<InferenceSession> {
       require("../../assets/models/ultraface.onnx"),
     );
     if (!asset.localUri) throw new Error("ultraface.onnx has no localUri");
+    const { InferenceSession } = getOrt();
     _session = await InferenceSession.create(asset.localUri);
     return _session;
   })();
@@ -100,6 +114,7 @@ function nms(boxes: number[][], scores: number[]): number[] {
 
 export async function detectFaces(imageUri: string): Promise<DetectedFace[]> {
   try {
+    const { Tensor } = getOrt();
     const [origSize, resized] = await Promise.all([
       getOriginalSize(imageUri),
       ImageManipulator.manipulateAsync(
