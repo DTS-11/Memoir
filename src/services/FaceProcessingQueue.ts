@@ -1,4 +1,4 @@
-import { detectFaces } from "./FaceDetectionService";
+import { detectFaces, probeOnnxSupport } from "./FaceDetectionService";
 import { getEmbedding } from "./FaceEmbeddingService";
 import { clusterFaces } from "./FaceClusteringService";
 import { FaceDb, type FaceRecord } from "../db/faceDb";
@@ -9,6 +9,7 @@ export type ScanProgress = {
   total: number;
   status: "idle" | "scanning" | "clustering" | "done" | "up_to_date" | "error";
   newFaces: number;
+  errorMessage?: string;
 };
 
 // Process 3 photos at a time — balances throughput vs UI responsiveness
@@ -49,6 +50,20 @@ export async function runFaceScan(
 
     if (pending.length === 0) {
       onProgress({ processed: 0, total: 0, status: "up_to_date", newFaces: 0 });
+      return;
+    }
+
+    // Pre-flight the ONNX engine before scanning the gallery so a broken
+    // engine surfaces as a friendly error instead of a crash or empty result.
+    const engineError = await probeOnnxSupport();
+    if (engineError) {
+      onProgress({
+        processed: 0,
+        total: pending.length,
+        status: "error",
+        newFaces: 0,
+        errorMessage: engineError,
+      });
       return;
     }
 
@@ -119,7 +134,13 @@ export async function runFaceScan(
 
     onProgress({ processed: total, total, status: "done", newFaces });
   } catch {
-    onProgress({ processed: 0, total: 0, status: "error", newFaces: 0 });
+    onProgress({
+      processed: 0,
+      total: 0,
+      status: "error",
+      newFaces: 0,
+      errorMessage: "Face scanning failed. Please try again.",
+    });
   } finally {
     running = false;
   }

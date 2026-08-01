@@ -54,13 +54,20 @@ async function loadSession(): Promise<InferenceSession> {
     }
 
     const { InferenceSession } = getOrt();
-    const s = await InferenceSession.create(asset.localUri);
+    const s = await InferenceSession.create(asset.localUri, EMBEDDER_SESSION_OPTIONS);
     session = s;
     return s;
   })();
 
   return sessionPromise;
 }
+
+// The FaceNet model is ~95 MB. 'basic' optimization avoids the transient
+// memory spike of full graph transforms, which can hard-crash low-RAM devices
+// during session creation.
+const EMBEDDER_SESSION_OPTIONS: InferenceSession.SessionOptions = {
+  graphOptimizationLevel: "basic",
+};
 
 /** Kick off model loading without blocking the caller. Returns a promise that resolves once the model is ready. */
 export function preloadModel(): Promise<void> {

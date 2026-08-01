@@ -12,11 +12,17 @@ import { PhotoLibraryProvider } from "../src/hooks/usePhotos";
 import { FaceProcessingProvider } from "../src/hooks/useFaceProcessing";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ fade: true, duration: 350 });
+
 function Root() {
   const { colors, isDark } = useTheme();
 
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 80);
+    return () => clearTimeout(t);
   }, []);
 
   return (

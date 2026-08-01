@@ -3,15 +3,10 @@
     "name": "Memoir",
     "slug": "memoir",
     "scheme": "memoir",
-    "version": "0.8.2",
+    "version": "0.8.3",
     "orientation": "portrait",
     "icon": "./assets/memoir_logo.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/memoir_logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.memoir.app",
@@ -24,7 +19,7 @@
     },
     "android": {
       "package": "com.memoir.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "icon": "./assets/memoir_logo.png",
       "adaptiveIcon": {
         "backgroundColor": "#000000",
@@ -49,6 +44,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#08080E",
+          "imageWidth": 240
+        }
+      ],
       [
         "expo-build-properties",
         {

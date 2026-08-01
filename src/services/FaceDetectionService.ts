@@ -44,16 +44,41 @@ async function loadSession(): Promise<InferenceSession> {
     );
     if (!asset.localUri) throw new Error("ultraface.onnx has no localUri");
     const { InferenceSession } = getOrt();
-    _session = await InferenceSession.create(asset.localUri);
+    _session = await InferenceSession.create(asset.localUri, DETECTOR_SESSION_OPTIONS);
     return _session;
   })();
   return _sessionPromise;
 }
 
-export function preloadDetector(): Promise<void> {
-  return loadSession()
-    .then(() => {})
-    .catch(() => {});
+// Keep the detector session light: 'basic' optimization avoids the large
+// memory spike of full graph transforms on low-RAM devices.
+const DETECTOR_SESSION_OPTIONS: InferenceSession.SessionOptions = {
+  graphOptimizationLevel: "basic",
+};
+
+function friendlyOrtError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/install|OrtApi|native module|Onnxruntime|undefined is not an object/i.test(msg)) {
+    return "Face scanning isn't available on this device (the recognition engine failed to load).";
+  }
+  return "Face scanning failed to start. Please try again.";
+}
+
+/**
+ * Pre-flight check that the ONNX Runtime native layer can load and create a
+ * session. Call before a full scan so a broken engine surfaces as a friendly
+ * error instead of a silent scan that finds nothing.
+ *
+ * Returns an error message when the engine is unavailable, otherwise null.
+ */
+export async function probeOnnxSupport(): Promise<string | null> {
+  try {
+    getOrt();
+    await loadSession();
+    return null;
+  } catch (e) {
+    return friendlyOrtError(e);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -52,7 +52,6 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
     abortScan();
     setProgress((p) => ({ ...p, status: "idle" }));
   }, []);
-
   const recluster = useCallback(async () => {
     await runClustering();
   }, []);

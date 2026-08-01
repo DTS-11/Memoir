@@ -5,6 +5,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -19,6 +20,7 @@ const iconMap: Record<string, TabIconName> = {
 };
 
 const TAB_SPRING = { damping: 26, stiffness: 240, mass: 0.9 } as const;
+const PRESS_SPRING = { damping: 18, stiffness: 340, mass: 0.7 } as const;
 
 // Width of each icon slot inside the pill.
 const SLOT = 64;
@@ -96,24 +98,57 @@ export function Dock(props: BottomTabBarProps) {
           const iconName = iconMap[name] ?? "library";
 
           return (
-            <Pressable
+            <DockTab
               key={route.key}
-              accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
+              iconName={iconName}
+              isFocused={isFocused}
+              color={isFocused ? colors.text : colors.textSecondary}
               onPress={onPress}
-              style={styles.tab}
-              hitSlop={8}
-            >
-              <TabIcon
-                name={iconName}
-                color={isFocused ? colors.text : colors.textSecondary}
-                size={23}
-              />
-            </Pressable>
+            />
           );
         })}
       </GlassView>
     </View>
+  );
+}
+
+function DockTab({
+  iconName,
+  isFocused,
+  color,
+  onPress,
+}: {
+  iconName: TabIconName;
+  isFocused: boolean;
+  color: string;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const pressIn = () => {
+    scale.value = withTiming(0.82, { duration: 70 });
+  };
+  const pressOut = () => {
+    scale.value = withSpring(1, PRESS_SPRING);
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={isFocused ? { selected: true } : {}}
+      onPress={onPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      style={styles.tab}
+      hitSlop={8}
+    >
+      <Animated.View style={animatedStyle}>
+        <TabIcon name={iconName} color={color} size={23} />
+      </Animated.View>
+    </Pressable>
   );
 }
 

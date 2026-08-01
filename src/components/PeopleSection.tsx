@@ -1,17 +1,24 @@
-import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useCallback, useEffect } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { useTheme } from "../theme/ThemeProvider";
+import { semantic } from "../theme/tokens";
+import { GlassView } from "./GlassView";
 import { PersonCard } from "./PersonCard";
 import type { PersonWithCover } from "../hooks/usePeople";
 import type { ScanProgress } from "../services/FaceProcessingQueue";
+
+const HERO_GRADIENT = ["#7C6CF0", "#4B7BEC"] as const;
+const PRESS_SPRING = { damping: 20, stiffness: 320, mass: 0.8 } as const;
+const RELEASE_SPRING = { damping: 16, stiffness: 220, mass: 0.8 } as const;
 
 type Props = {
   persons: PersonWithCover[];
@@ -36,37 +43,75 @@ export function PeopleSection({
   const scanPct =
     progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
 
+  // ── Error state ─────────────────────────────────────────────────────────────
+  if (progress.status === "error") {
+    return (
+      <Animated.View entering={FadeInDown.springify().damping(18)}>
+        <GlassView intensity={70} bordered style={styles.errorCard}>
+          <View style={styles.errorRow}>
+            <View style={[styles.errorIcon, { backgroundColor: semantic.deleteMuted }]}>
+              <Ionicons name="alert-circle-outline" size={22} color={semantic.delete} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.headline, { color: colors.text }]}>
+                Face scanning couldn't start
+              </Text>
+              <Text
+                style={[
+                  typography.footnote,
+                  { color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
+                ]}
+              >
+                {progress.errorMessage ?? "Something went wrong on this device."}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={onStartScan}
+            style={({ pressed }) => [
+              styles.errorRetry,
+              { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <Text style={[typography.footnote, { color: colors.background }]}>
+              Try again
+            </Text>
+          </Pressable>
+        </GlassView>
+      </Animated.View>
+    );
+  }
+
   // ── Empty / scan prompt ────────────────────────────────────────────────────
   if (persons.length === 0 && !loadingPeople && !isScanning) {
     return (
-      <View style={styles.emptyContainer}>
-        <View style={[styles.emptyIcon, { backgroundColor: colors.accentMuted }]}>
-          <Ionicons name="people" size={28} color={colors.accent} />
-        </View>
-        <Text style={[typography.headline, { color: colors.text, marginTop: 12 }]}>
-          People
-        </Text>
-        <Text
-          style={[
-            typography.subhead,
-            { color: colors.textSecondary, textAlign: "center", marginTop: 4 },
-          ]}
-        >
-          Memoir can group your photos by the faces it finds, entirely on‑device.
-        </Text>
-        <Pressable
-          onPress={onStartScan}
-          style={({ pressed }) => [
-            styles.scanBtn,
-            { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
-          ]}
-        >
-          <Ionicons name="scan" size={16} color={colors.background} />
-          <Text style={[typography.subhead, { color: colors.background, marginLeft: 6 }]}>
-            Scan for People
+      <Animated.View
+        entering={FadeInDown.springify().damping(18)}
+        style={styles.emptyWrap}
+      >
+        <GlassView intensity={70} bordered style={styles.heroCard}>
+          <LinearGradient
+            colors={[...HERO_GRADIENT]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroIcon}
+          >
+            <Ionicons name="people" size={30} color="#FFFFFF" />
+          </LinearGradient>
+          <Text style={[typography.title3, { color: colors.text, marginTop: 14 }]}>
+            People
           </Text>
-        </Pressable>
-      </View>
+          <Text
+            style={[
+              typography.subhead,
+              { color: colors.textSecondary, textAlign: "center", marginTop: 4 },
+            ]}
+          >
+            Memoir can group your photos by the faces it finds — entirely on your device.
+          </Text>
+          <ScanButton onPress={onStartScan} />
+        </GlassView>
+      </Animated.View>
     );
   }
 
@@ -74,21 +119,7 @@ export function PeopleSection({
     <View>
       {/* Progress bar while scanning */}
       {isScanning && (
-        <View style={[styles.progressContainer, { backgroundColor: colors.surface }]}>
-          <ActivityIndicator
-            size="small"
-            color={colors.accent}
-            style={{ marginRight: 8 }}
-          />
-          <Text style={[typography.subhead, { color: colors.textSecondary, flex: 1 }]}>
-            {progress.status === "clustering"
-              ? "Grouping faces…"
-              : `Scanning… ${scanPct}%`}
-          </Text>
-          <Pressable onPress={onStopScan} hitSlop={10}>
-            <Ionicons name="stop-circle" size={20} color={colors.textTertiary} />
-          </Pressable>
-        </View>
+        <ScanProgressRow progress={progress} scanPct={scanPct} onStopScan={onStopScan} />
       )}
 
       {/* Horizontal scroll of people */}
@@ -101,10 +132,22 @@ export function PeopleSection({
           style={styles.scroll}
         >
           {loadingPeople && persons.length === 0 ? (
-            <ActivityIndicator color={colors.accent} style={{ margin: 24 }} />
+            <Animated.View
+              entering={FadeInDown.springify().damping(18)}
+              style={{ padding: 24 }}
+            >
+              <Ionicons name="sync" size={22} color={colors.textTertiary} />
+            </Animated.View>
           ) : (
-            persons.map((p) => (
-              <PersonCard key={p.id} person={p} onPress={onPersonPress} />
+            persons.map((p, i) => (
+              <Animated.View
+                key={p.id}
+                entering={FadeInDown.springify()
+                  .damping(20)
+                  .delay(Math.min(i * 50, 400))}
+              >
+                <PersonCard person={p} onPress={onPersonPress} />
+              </Animated.View>
             ))
           )}
         </ScrollView>
@@ -118,7 +161,7 @@ export function PeopleSection({
             styles.rescanRow,
             {
               borderTopColor: colors.separator,
-              opacity: pressed ? 0.6 : 1,
+              opacity: pressed ? 0.55 : 1,
             },
           ]}
         >
@@ -134,34 +177,178 @@ export function PeopleSection({
   );
 }
 
+function ScanButton({ onPress }: { onPress: () => void }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const pressIn = useCallback(() => {
+    scale.value = withSpring(0.95, PRESS_SPRING);
+  }, [scale]);
+
+  const pressOut = useCallback(() => {
+    scale.value = withSpring(1, RELEASE_SPRING);
+  }, [scale]);
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={({ pressed }) => [styles.scanBtnWrap, pressed && { opacity: 0.92 }]}
+      >
+        <LinearGradient
+          colors={[...HERO_GRADIENT]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.scanBtn}
+        >
+          <Ionicons name="scan" size={17} color="#FFFFFF" />
+          <Text style={styles.scanBtnText}>Scan for People</Text>
+        </LinearGradient>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function ScanProgressRow({
+  progress,
+  scanPct,
+  onStopScan,
+}: {
+  progress: ScanProgress;
+  scanPct: number;
+  onStopScan: () => void;
+}) {
+  const { colors, typography } = useTheme();
+  const barWidth = useSharedValue(0);
+
+  useEffect(() => {
+    barWidth.value = withTiming(scanPct, { duration: 320 });
+  }, [scanPct, barWidth]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${barWidth.value}%`,
+  }));
+
+  const label =
+    progress.status === "clustering" ? "Grouping faces…" : `Scanning… ${scanPct}%`;
+
+  return (
+    <GlassView intensity={70} bordered style={styles.progressContainer}>
+      <View style={styles.progressTop}>
+        <Animated.View entering={FadeInDown.springify().damping(20)}>
+          <Ionicons name="sparkles" size={18} color={colors.accent} />
+        </Animated.View>
+        <Text style={[typography.subhead, { color: colors.text, flex: 1 }]}>{label}</Text>
+        <Pressable onPress={onStopScan} hitSlop={10}>
+          <Ionicons name="stop-circle" size={22} color={colors.textTertiary} />
+        </Pressable>
+      </View>
+      <View style={[styles.progressTrack, { backgroundColor: colors.accentMuted }]}>
+        <Animated.View
+          style={[styles.progressFill, { backgroundColor: colors.accent }, barStyle]}
+        />
+      </View>
+    </GlassView>
+  );
+}
+
 const styles = StyleSheet.create({
-  emptyContainer: {
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 32,
+  emptyWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
   },
-  emptyIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  heroCard: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    borderRadius: 24,
+    borderCurve: "continuous",
+  },
+  heroIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#4B7BEC",
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  scanBtnWrap: {
+    marginTop: 18,
+    borderRadius: 999,
+    shadowColor: "#4B7BEC",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   scanBtn: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 22,
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
+  scanBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   progressContainer: {
+    marginBottom: 8,
+    borderRadius: 18,
+    borderCurve: "continuous",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  progressTop: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    gap: 8,
     marginBottom: 8,
+  },
+  progressTrack: {
+    height: 5,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  errorCard: {
+    marginHorizontal: 20,
+    marginVertical: 8,
+    borderRadius: 20,
+    borderCurve: "continuous",
+    padding: 16,
+    gap: 14,
+  },
+  errorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  errorIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorRetry: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
   },
   scroll: {
     marginHorizontal: -16,
