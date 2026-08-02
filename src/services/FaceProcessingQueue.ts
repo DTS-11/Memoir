@@ -165,8 +165,12 @@ export async function runClustering(): Promise<void> {
   const clusters = clusterFaces(allFaces, existingPersons);
 
   const assignments: { faceId: string; personId: string | null }[] = [];
+  const assigned = new Set<string>();
   const persons = clusters.map((c) => {
-    for (const fid of c.faceIds) assignments.push({ faceId: fid, personId: c.personId });
+    for (const fid of c.faceIds) {
+      assignments.push({ faceId: fid, personId: c.personId });
+      assigned.add(fid);
+    }
 
     const existing = existingPersons.find((p) => p.id === c.personId);
     return {
@@ -177,6 +181,16 @@ export async function runClustering(): Promise<void> {
     };
   });
 
+  // Faces that ended up in no cluster (e.g. too few to form a person) must not
+  // keep a stale person_id pointing at a person we're about to prune.
+  for (const f of allFaces) {
+    if (!assigned.has(f.id)) assignments.push({ faceId: f.id, personId: null });
+  }
+
   await FaceDb.updateFacePersonIds(assignments);
   await FaceDb.upsertPersons(persons);
+
+  // Remove persons that no longer own any faces so renamed/merged groups don't
+  // leave orphaned, empty person rows behind.
+  await FaceDb.deletePersonsNotIn(persons.map((p) => p.id));
 }

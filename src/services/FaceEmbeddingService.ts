@@ -7,22 +7,31 @@ import type { DetectedFace } from "./FaceDetectionService";
 // Instead of a neural embedding model (the ONNX runtime crashed on-device), we
 // build a lightweight, crash-free "face fingerprint" purely in JS:
 //
-//   1. Appearance — the 160×160 face crop is downsampled to a 24×24 grayscale
-//      grid (576 dims), photometrically normalised (mean/std) for lighting
-//      invariance.
-//   2. Edges — gradient magnitude of that grid (576 dims), which emphasises
+//   1. Appearance — the face crop is eye-aligned (rotated so the eye line is
+//      level and scaled so the inter-pupil distance is constant), then sampled
+//      into a 32×32 grayscale grid (1024 dims), photometrically normalised
+//      (mean/std) for lighting invariance.
+//   2. Edges — gradient magnitude of that grid (1024 dims), which emphasises
 //      facial structure over illumination.
 //   3. Geometry — ML Kit landmark positions (eyes, nose, mouth) normalised to
-//      the face frame plus a few distance ratios (16 dims).
+//      the face frame plus a few distance ratios (16 dims), down-weighted so
+//      noisy landmarks can't dominate the similarity score.
 //
 // The concatenated vector is L2-normalised and clustered with cosine distance,
 // exactly like a FaceNet embedding. It is deterministic, fast, and runs on the
 // JS thread, so it can never hard-crash the app.
 
-const THUMB_SIZE = 160;
-const GRID = 24; // appearance grid cells per side
+const WORK_SIZE = 192;
+const GRID = 32; // appearance grid cells per side
 const GRID_DIMS = GRID * GRID;
 const GEOM_DIMS = 16;
+// Geometry dims are noisier than the pixel dims; scale them down so they stay
+// informative without dominating the cosine distance.
+const GEOM_WEIGHT = 0.5;
+// Where the eyes should sit in the aligned grid (x-centre, y in grid cells).
+const EYE_Y_CELLS = 0.42 * GRID;
+// Inter-pupil distance mapped to this many grid cells (sets face scale).
+const IPD_CELLS = 0.4 * GRID;
 
 /** Fixed dimensionality of the fingerprint. Used to invalidate old scan data. */
 export const FINGERPRINT_DIM = GRID_DIMS + GRID_DIMS + GEOM_DIMS;
@@ -48,29 +57,62 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-/** Average RGBA pixels into a GRID×GRID grayscale image. */
-function grayscaleGrid(
+function grayAt(
   rgba: Uint8Array,
   width: number,
   height: number,
+  x: number,
+  y: number,
+): number {
+  const cx = x < 0 ? 0 : x > width - 1 ? width - 1 : x;
+  const cy = y < 0 ? 0 : y > height - 1 ? height - 1 : y;
+  const x0 = Math.floor(cx);
+  const y0 = Math.floor(cy);
+  const x1 = Math.min(width - 1, x0 + 1);
+  const y1 = Math.min(height - 1, y0 + 1);
+  const fx = cx - x0;
+  const fy = cy - y0;
+  const i00 = (y0 * width + x0) * 4;
+  const i10 = (y0 * width + x1) * 4;
+  const i01 = (y1 * width + x0) * 4;
+  const i11 = (y1 * width + x1) * 4;
+  const lum = (i: number) => 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+  const top = lum(i00) + (lum(i10) - lum(i00)) * fx;
+  const bot = lum(i01) + (lum(i11) - lum(i01)) * fx;
+  return top + (bot - top) * fy;
+}
+
+/**
+ * Sample a GRID×GRID grayscale grid from an affine-aligned window of the image.
+ * The window is centred on the eye midpoint, rotated so the eye line is level,
+ * and scaled so the inter-pupil distance fills a fixed fraction of the grid.
+ * This normalises away head roll and face scale differences — the two biggest
+ * causes of same-person faces landing far apart in embedding space.
+ */
+function alignedGrid(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+  params: {
+    eyeMidX: number;
+    eyeMidY: number;
+    cos: number;
+    sin: number;
+    pxPerCell: number;
+    eyeY: number;
+  },
 ): Float32Array {
+  const { eyeMidX, eyeMidY, cos, sin, pxPerCell, eyeY } = params;
   const out = new Float32Array(GRID_DIMS);
+  const gridCentre = GRID / 2;
   for (let gy = 0; gy < GRID; gy++) {
-    const y0 = Math.floor((gy / GRID) * height);
-    const y1 = Math.floor(((gy + 1) / GRID) * height);
+    const dy = (gy - eyeY) * pxPerCell;
     for (let gx = 0; gx < GRID; gx++) {
-      const x0 = Math.floor((gx / GRID) * width);
-      const x1 = Math.floor(((gx + 1) / GRID) * width);
-      let sum = 0;
-      let count = 0;
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const i = (y * width + x) * 4;
-          sum += 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
-          count++;
-        }
-      }
-      out[gy * GRID + gx] = count > 0 ? sum / count : 0;
+      const dx = (gx - gridCentre) * pxPerCell;
+      // Inverse of the alignment: rotate + translate into image coordinates.
+      const sx = eyeMidX + dx * cos - dy * sin;
+      const sy = eyeMidY + dx * sin + dy * cos;
+      out[gy * GRID + gx] = grayAt(rgba, width, height, sx, sy);
     }
   }
   return out;
@@ -125,14 +167,14 @@ function l2Normalize(vec: Float32Array): Float32Array {
 
 // ── Landmark geometry ─────────────────────────────────────────────────────────
 
-const GEOM_ORDER: ("leftEye" | "rightEye" | "noseBase" | "mouthLeft" | "mouthRight" | "mouthBottom")[] = [
-  "leftEye",
-  "rightEye",
-  "noseBase",
-  "mouthLeft",
-  "mouthRight",
-  "mouthBottom",
-];
+const GEOM_ORDER: (
+  | "leftEye"
+  | "rightEye"
+  | "noseBase"
+  | "mouthLeft"
+  | "mouthRight"
+  | "mouthBottom"
+)[] = ["leftEye", "rightEye", "noseBase", "mouthLeft", "mouthRight", "mouthBottom"];
 
 /**
  * Encode landmark positions relative to the face frame into a fixed-length
@@ -197,18 +239,17 @@ export async function getEmbedding(
   try {
     const { x, y, width, height } = face.bounds;
 
-    // 20 % padding around the face for a more stable fingerprint.
-    const pad = Math.max(width, height) * 0.2;
-    const originX = Math.max(0, x - pad);
-    const originY = Math.max(0, y - pad);
-    const cropW = width + pad * 2;
-    const cropH = height + pad * 2;
+    // Generous square crop (1.8× the face) centred on the face so there is room
+    // to rotate during alignment without clipping the face.
+    const side = Math.max(width, height) * 1.8;
+    const originX = Math.max(0, x + width / 2 - side / 2);
+    const originY = Math.max(0, y + height / 2 - side / 2);
 
     const manipResult = await ImageManipulator.manipulateAsync(
       imageUri,
       [
-        { crop: { originX, originY, width: cropW, height: cropH } },
-        { resize: { width: THUMB_SIZE, height: THUMB_SIZE } },
+        { crop: { originX, originY, width: side, height: side } },
+        { resize: { width: WORK_SIZE, height: WORK_SIZE } },
       ],
       {
         format: ImageManipulator.SaveFormat.JPEG,
@@ -230,15 +271,44 @@ export async function getEmbedding(
     // ── Build fingerprint ─────────────────────────────────────────────────────
     const jpegBytes = base64ToBytes(base64);
     const decoded = jpeg.decode(jpegBytes, { useTArray: true });
+    const w = decoded.width;
+    const h = decoded.height;
+    const s = w / side; // original px → working px
 
-    const gray = zScore(grayscaleGrid(decoded.data, decoded.width, decoded.height));
-    const edges = zScore(gradientMagnitude(gray));
+    const eyeL = face.landmarks.leftEye;
+    const eyeR = face.landmarks.rightEye;
+    const eyeLX = (eyeL ? eyeL.x : x + width / 2) - originX;
+    const eyeLY = (eyeL ? eyeL.y : y + height / 2) - originY;
+    const eyeRX = (eyeR ? eyeR.x : x + width / 2) - originX;
+    const eyeRY = (eyeR ? eyeR.y : y + height / 2) - originY;
+
+    const exL = eyeLX * s;
+    const eyL = eyeLY * s;
+    const exR = eyeRX * s;
+    const eyR = eyeRY * s;
+    const ipd = Math.hypot(exR - exL, eyR - eyL);
+
+    // Align using the eyes when both are present; otherwise fall back to the
+    // face frame (no rotation, face box scaled to fill the grid).
+    const aligned = alignedGrid(decoded.data, w, h, {
+      eyeMidX: (exL + exR) / 2,
+      eyeMidY: (eyL + eyR) / 2,
+      cos: Math.cos(Math.atan2(eyR - eyL, exR - exL)),
+      sin: Math.sin(Math.atan2(eyR - eyL, exR - exL)),
+      pxPerCell: ipd > 0 ? ipd / IPD_CELLS : (width * s) / (0.75 * GRID),
+      eyeY: ipd > 0 ? EYE_Y_CELLS : GRID / 2,
+    });
+
+    const gray = zScore(aligned);
+    const edges = zScore(gradientMagnitude(aligned));
     const geometry = buildGeometry(face);
 
     const embedding = new Float32Array(FINGERPRINT_DIM);
     embedding.set(gray, 0);
     embedding.set(edges, GRID_DIMS);
-    embedding.set(geometry, GRID_DIMS * 2);
+    for (let i = 0; i < GEOM_DIMS; i++) {
+      embedding[GRID_DIMS * 2 + i] = geometry[i] * GEOM_WEIGHT;
+    }
 
     return { embedding: l2Normalize(embedding), thumbUri };
   } catch {

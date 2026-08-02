@@ -1,9 +1,8 @@
-import { DBSCAN } from "density-clustering";
 import type { FaceRecord, PersonRecord } from "../db/faceDb";
 
 // Cosine distance between two L2-normalized vectors.
 // Range [0, 2]; ≈0 means same person, ≈1.5+ means different person.
-function cosineDist(a: number[], b: number[]): number {
+function cosineDist(a: Float32Array, b: Float32Array): number {
   let dot = 0;
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
   // Both vectors are already L2-normalized, so ||a||=||b||=1 → dist = 1 − dot
@@ -16,24 +15,83 @@ export type ClusterGroup = {
   coverFaceId: string;
 };
 
+class UnionFind {
+  private parent: Int32Array;
+  private rank: Int32Array;
+
+  constructor(n: number) {
+    this.parent = new Int32Array(n);
+    this.rank = new Int32Array(n);
+    for (let i = 0; i < n; i++) this.parent[i] = i;
+  }
+
+  find(x: number): number {
+    let root = x;
+    while (this.parent[root] !== root) root = this.parent[root];
+    while (this.parent[x] !== x) {
+      const next = this.parent[x];
+      this.parent[x] = root;
+      x = next;
+    }
+    return root;
+  }
+
+  union(a: number, b: number): void {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return;
+    if (this.rank[ra] < this.rank[rb]) {
+      this.parent[ra] = rb;
+    } else if (this.rank[ra] > this.rank[rb]) {
+      this.parent[rb] = ra;
+    } else {
+      this.parent[rb] = ra;
+      this.rank[ra]++;
+    }
+  }
+}
+
 /**
- * Cluster face embeddings with DBSCAN, then try to preserve existing person
- * IDs so user-given names survive re-clustering.
+ * Cluster face embeddings and try to preserve existing person IDs so user-given
+ * names survive re-clustering.
  *
- * epsilon: cosine distance threshold — tune 0.4 (strict) → 0.6 (lenient).
+ * Uses single-linkage connected components (union-find) instead of DBSCAN: it
+ * merges faces through gradual appearance drift (lighting, expression, ageing),
+ * which is exactly the chain that used to split one person into many small
+ * DBSCAN clusters.
+ *
+ * epsilon: cosine distance threshold — tune 0.4 (strict) → 0.7 (lenient).
  * minPts : minimum faces per cluster before it is counted as a person.
  */
 export function clusterFaces(
   faces: FaceRecord[],
   existingPersons: PersonRecord[],
-  epsilon = 0.5,
+  epsilon = 0.6,
   minPts = 2,
 ): ClusterGroup[] {
   if (faces.length === 0) return [];
 
-  const dataset = faces.map((f) => Array.from(f.embedding));
-  const dbscan = new DBSCAN();
-  const clusters = dbscan.run(dataset, epsilon, minPts, cosineDist);
+  const n = faces.length;
+  const uf = new UnionFind(n);
+
+  for (let i = 0; i < n; i++) {
+    const a = faces[i].embedding;
+    for (let j = i + 1; j < n; j++) {
+      if (cosineDist(a, faces[j].embedding) <= epsilon) uf.union(i, j);
+    }
+  }
+
+  const byRoot = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const r = uf.find(i);
+    const arr = byRoot.get(r);
+    if (arr) arr.push(i);
+    else byRoot.set(r, [i]);
+  }
+
+  const clusters = Array.from(byRoot.values())
+    .filter((indices) => indices.length >= minPts)
+    .sort((a, b) => b.length - a.length);
 
   // Build a reverse map from faceId → existing personId
   const existingAssignment = new Map<string, string>(

@@ -210,6 +210,13 @@ export const FaceDb = {
     ]);
   },
 
+  async deletePersonsNotIn(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const d = await getDb();
+    const placeholders = ids.map(() => "?").join(",");
+    await d.runAsync(`DELETE FROM persons WHERE id NOT IN (${placeholders})`, ids);
+  },
+
   async clearAll(): Promise<void> {
     const d = await getDb();
     await d.execAsync(`DELETE FROM faces; DELETE FROM persons; DELETE FROM photo_scan;`);
