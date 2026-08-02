@@ -84,6 +84,13 @@ export default function PhotoViewer() {
   // Without this, currentIndex starts at 0 on mount and the wrong item auto-plays.
   const indexReadyRef = useRef(photos.length > 0);
   const [details, setDetails] = useState<AssetDetails | null>(fallbackPhoto ?? null);
+  // Per-photo resolved local file URI. Kept as a stable map (keyed by photo id)
+  // so each paged cell renders the same source forever — never the previous
+  // item's localUri, which is what caused the "previous image pops up" flash.
+  const [localUriMap, setLocalUriMap] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const fetchedLocalUriRef = useRef<Set<string>>(new Set());
   const [chromeVisible, setChromeVisible] = useState(true);
   const [infoVisible, setInfoVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -125,7 +132,6 @@ export default function PhotoViewer() {
   const current = data[currentIndex] ?? fallbackPhoto ?? directPhoto;
   const currentRef = useRef(current);
   currentRef.current = current;
-  const displayUri = details?.localUri || current?.uri;
   const isCurrentVideo = current?.mediaType === "video";
   const isCurrentAudio = current?.mediaType === "audio";
   const isCurrentPlayable = isCurrentVideo || isCurrentAudio;
@@ -421,6 +427,37 @@ export default function PhotoViewer() {
     [data.length, width],
   );
 
+  // Resolve a stable file URI for the current page and its neighbours so a
+  // swipe never waits on (or flashes) a stale source. Resolves once per photo.
+  const resolveLocalUris = useCallback(
+    (index: number) => {
+      const start = Math.max(0, index - 1);
+      const end = Math.min(data.length - 1, index + 1);
+      for (let i = start; i <= end; i++) {
+        const item = data[i];
+        if (!item || fetchedLocalUriRef.current.has(item.id)) continue;
+        fetchedLocalUriRef.current.add(item.id);
+        MediaLibrary.getAssetInfoAsync(item.id)
+          .then((info) => {
+            const localUri = info?.localUri;
+            if (!localUri) return;
+            setLocalUriMap((prev) => {
+              const next = new Map(prev);
+              next.set(info.id, localUri);
+              return next;
+            });
+          })
+          .catch(() => {});
+      }
+    },
+    [data],
+  );
+
+  useEffect(() => {
+    if (data.length === 0) return;
+    resolveLocalUris(currentIndex);
+  }, [currentIndex, data, resolveLocalUris]);
+
   const shareCurrent = useCallback(async () => {
     if (!current) return;
     Haptics.selectionAsync();
@@ -639,7 +676,7 @@ export default function PhotoViewer() {
                     ) : (
                       <Image
                         source={{
-                          uri: isCurrentItem && displayUri ? displayUri : item.uri,
+                          uri: localUriMap.get(item.id) ?? item.uri,
                         }}
                         style={{ width, height }}
                         contentFit="contain"
@@ -666,10 +703,11 @@ export default function PhotoViewer() {
             onMomentumScrollEnd={onMomentumEnd}
             onScrollBeginDrag={stopSlideshow}
             showsHorizontalScrollIndicator={false}
+            bounces={false}
+            overScrollMode="never"
             windowSize={3}
             maxToRenderPerBatch={2}
             initialNumToRender={1}
-            removeClippedSubviews
           />
         </View>
       </GestureDetector>
