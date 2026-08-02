@@ -1,5 +1,5 @@
-import { detectFaces, probeOnnxSupport } from "./FaceDetectionService";
-import { getEmbedding } from "./FaceEmbeddingService";
+import { detectFaces, probeFaceDetectionSupport } from "./FaceDetectionService";
+import { getEmbedding, FINGERPRINT_DIM } from "./FaceEmbeddingService";
 import { clusterFaces } from "./FaceClusteringService";
 import { FaceDb, type FaceRecord } from "../db/faceDb";
 import type { Photo } from "../hooks/usePhotos";
@@ -53,9 +53,16 @@ export async function runFaceScan(
       return;
     }
 
-    // Pre-flight the ONNX engine before scanning the gallery so a broken
+    // Old scan data may hold FaceNet embeddings with a different length. If so,
+    // wipe it so clustering never compares mismatched vectors.
+    const storedDim = await FaceDb.getAnyEmbeddingDim();
+    if (storedDim != null && storedDim !== FINGERPRINT_DIM) {
+      await FaceDb.clearAll();
+    }
+
+    // Pre-flight the detection engine before scanning the gallery so a broken
     // engine surfaces as a friendly error instead of a crash or empty result.
-    const engineError = await probeOnnxSupport();
+    const engineError = await probeFaceDetectionSupport();
     if (engineError) {
       onProgress({
         processed: 0,

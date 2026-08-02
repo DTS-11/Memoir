@@ -35,9 +35,6 @@ github-secrets-to-upload.txt
 # npm lockfile (project uses bun)
 package-lock.json
 
-# ML model weight data — too large for git (90 MB+); Metro only needs the .onnx header
-assets/models/*.onnx.data
-
 # debug
 npm-debug.*
 yarn-debug.*

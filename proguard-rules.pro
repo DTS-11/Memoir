@@ -1,8 +1,3 @@
-# ONNX Runtime
--keep class ai.onnxruntime.** { *; }
--keep class com.microsoft.onnxruntime.** { *; }
--dontwarn ai.onnxruntime.**
-
 # react-native-worklets (rules not published as consumer rules)
 -keep class com.swmansion.worklets.** { *; }
 

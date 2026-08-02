@@ -1,80 +1,31 @@
-import { Asset } from "expo-asset";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
-import type { InferenceSession, Tensor } from "onnxruntime-react-native";
 import jpeg from "jpeg-js";
 import type { DetectedFace } from "./FaceDetectionService";
 
-// ── Model config ─────────────────────────────────────────────────────────────
-// Expected model: FaceNet ONNX (128-dim or 512-dim)
-// Input : float32 NCHW [1, 3, 160, 160]
-// Pixel normalization: (pixel − 127.5) / 128.0
-// Output: float32 [1, N] L2-normalized embedding
-// See assets/models/README.md for download instructions.
-const MODEL_INPUT_SIZE = 160;
+// ── Fingerprint design ────────────────────────────────────────────────────────
+// Instead of a neural embedding model (the ONNX runtime crashed on-device), we
+// build a lightweight, crash-free "face fingerprint" purely in JS:
+//
+//   1. Appearance — the 160×160 face crop is downsampled to a 24×24 grayscale
+//      grid (576 dims), photometrically normalised (mean/std) for lighting
+//      invariance.
+//   2. Edges — gradient magnitude of that grid (576 dims), which emphasises
+//      facial structure over illumination.
+//   3. Geometry — ML Kit landmark positions (eyes, nose, mouth) normalised to
+//      the face frame plus a few distance ratios (16 dims).
+//
+// The concatenated vector is L2-normalised and clustered with cosine distance,
+// exactly like a FaceNet embedding. It is deterministic, fast, and runs on the
+// JS thread, so it can never hard-crash the app.
 
-// ── Singleton session ─────────────────────────────────────────────────────────
-let session: InferenceSession | null = null;
-let sessionPromise: Promise<InferenceSession> | null = null;
+const THUMB_SIZE = 160;
+const GRID = 24; // appearance grid cells per side
+const GRID_DIMS = GRID * GRID;
+const GEOM_DIMS = 16;
 
-// onnxruntime-react-native runs a synchronous JSI install() at import time and
-// loads large models when InferenceSession.create() is called. Importing it at
-// module load would do this native work during app startup (before React
-// mounts), which can hard-crash on-device. Load it lazily, only when a face
-// scan actually runs.
-let _ort: typeof import("onnxruntime-react-native") | null = null;
-function getOrt(): typeof import("onnxruntime-react-native") {
-  if (_ort) return _ort;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  _ort = require("onnxruntime-react-native") as typeof import("onnxruntime-react-native");
-  return _ort;
-}
-
-async function loadSession(): Promise<InferenceSession> {
-  if (session) return session;
-  if (sessionPromise) return sessionPromise;
-
-  sessionPromise = (async () => {
-    const [asset] = await Asset.loadAsync(
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require("../../assets/models/facenet.onnx"),
-    );
-    if (!asset.localUri) throw new Error("Model asset has no local URI");
-
-    // The model is a split ONNX (header + external .onnx.data). If only the
-    // header was bundled (< 5 MB) ONNX Runtime will crash natively trying to
-    // read the missing weight file — catch it here before we ever call create().
-    const info = await FileSystem.getInfoAsync(asset.localUri);
-    const fileSize = (info as { size?: number }).size ?? 0;
-    if (!info.exists || fileSize < 5_000_000) {
-      throw new Error(
-        "facenet.onnx is header-only (external data not bundled). " +
-          "Re-run convert_facenet.py with the inline flag to produce a single-file model.",
-      );
-    }
-
-    const { InferenceSession } = getOrt();
-    const s = await InferenceSession.create(asset.localUri, EMBEDDER_SESSION_OPTIONS);
-    session = s;
-    return s;
-  })();
-
-  return sessionPromise;
-}
-
-// The FaceNet model is ~95 MB. 'basic' optimization avoids the transient
-// memory spike of full graph transforms, which can hard-crash low-RAM devices
-// during session creation.
-const EMBEDDER_SESSION_OPTIONS: InferenceSession.SessionOptions = {
-  graphOptimizationLevel: "basic",
-};
-
-/** Kick off model loading without blocking the caller. Returns a promise that resolves once the model is ready. */
-export function preloadModel(): Promise<void> {
-  return loadSession()
-    .then(() => {})
-    .catch(() => {});
-}
+/** Fixed dimensionality of the fingerprint. Used to invalidate old scan data. */
+export const FINGERPRINT_DIM = GRID_DIMS + GRID_DIMS + GEOM_DIMS;
 
 // ── Thumb directory ───────────────────────────────────────────────────────────
 const THUMBS_DIR = `${FileSystem.documentDirectory}memoir_face_thumbs/`;
@@ -97,24 +48,69 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-/**
- * Convert raw RGBA pixel data (jpeg-js output) to a NCHW Float32Array with
- * FaceNet normalization: (pixel − 127.5) / 128.
- */
-function rgbaToNchwFloat32(
+/** Average RGBA pixels into a GRID×GRID grayscale image. */
+function grayscaleGrid(
   rgba: Uint8Array,
   width: number,
   height: number,
 ): Float32Array {
-  const pixels = width * height;
-  const out = new Float32Array(3 * pixels);
-  for (let i = 0; i < pixels; i++) {
-    const src = i * 4;
-    out[i] = (rgba[src] - 127.5) / 128.0; // R
-    out[pixels + i] = (rgba[src + 1] - 127.5) / 128.0; // G
-    out[2 * pixels + i] = (rgba[src + 2] - 127.5) / 128.0; // B
+  const out = new Float32Array(GRID_DIMS);
+  for (let gy = 0; gy < GRID; gy++) {
+    const y0 = Math.floor((gy / GRID) * height);
+    const y1 = Math.floor(((gy + 1) / GRID) * height);
+    for (let gx = 0; gx < GRID; gx++) {
+      const x0 = Math.floor((gx / GRID) * width);
+      const x1 = Math.floor(((gx + 1) / GRID) * width);
+      let sum = 0;
+      let count = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * width + x) * 4;
+          sum += 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+          count++;
+        }
+      }
+      out[gy * GRID + gx] = count > 0 ? sum / count : 0;
+    }
   }
   return out;
+}
+
+/** Gradient magnitude of a GRID×GRID image via central differences. */
+function gradientMagnitude(grid: Float32Array): Float32Array {
+  const out = new Float32Array(GRID_DIMS);
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const xm = grid[y * GRID + Math.max(0, x - 1)];
+      const xp = grid[y * GRID + Math.min(GRID - 1, x + 1)];
+      const ym = grid[Math.max(0, y - 1) * GRID + x];
+      const yp = grid[Math.min(GRID - 1, y + 1) * GRID + x];
+      const dx = xp - xm;
+      const dy = yp - ym;
+      out[y * GRID + x] = Math.sqrt(dx * dx + dy * dy);
+    }
+  }
+  return out;
+}
+
+/** Zero-mean, unit-variance, clamped to ±3 to limit outlier blow-up. */
+function zScore(v: Float32Array): Float32Array {
+  let mean = 0;
+  for (let i = 0; i < v.length; i++) mean += v[i];
+  mean /= v.length;
+  let varSum = 0;
+  for (let i = 0; i < v.length; i++) {
+    const d = v[i] - mean;
+    varSum += d * d;
+  }
+  const std = Math.sqrt(varSum / v.length) || 1;
+  for (let i = 0; i < v.length; i++) {
+    let z = (v[i] - mean) / std;
+    if (z > 3) z = 3;
+    else if (z < -3) z = -3;
+    v[i] = z;
+  }
+  return v;
 }
 
 function l2Normalize(vec: Float32Array): Float32Array {
@@ -127,6 +123,57 @@ function l2Normalize(vec: Float32Array): Float32Array {
   return out;
 }
 
+// ── Landmark geometry ─────────────────────────────────────────────────────────
+
+const GEOM_ORDER: ("leftEye" | "rightEye" | "noseBase" | "mouthLeft" | "mouthRight" | "mouthBottom")[] = [
+  "leftEye",
+  "rightEye",
+  "noseBase",
+  "mouthLeft",
+  "mouthRight",
+  "mouthBottom",
+];
+
+/**
+ * Encode landmark positions relative to the face frame into a fixed-length
+ * vector. Missing landmarks fall back to the frame centre so the dimensionality
+ * never changes between faces.
+ */
+function buildGeometry(face: DetectedFace): Float32Array {
+  const out = new Float32Array(GEOM_DIMS);
+  const { x, y, width, height } = face.bounds;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+
+  const norm = (p?: { x: number; y: number }): [number, number] =>
+    p ? [(p.x - x) / width, (p.y - y) / height] : [0.5, 0.5];
+
+  GEOM_ORDER.forEach((key, i) => {
+    const [nx, ny] = norm(face.landmarks[key]);
+    out[i * 2] = nx;
+    out[i * 2 + 1] = ny;
+  });
+
+  const eyeL = norm(face.landmarks.leftEye);
+  const eyeR = norm(face.landmarks.rightEye);
+  const nose = norm(face.landmarks.noseBase);
+  const mouthL = norm(face.landmarks.mouthLeft);
+  const mouthR = norm(face.landmarks.mouthRight);
+
+  const eyeMidX = (eyeL[0] + eyeR[0]) / 2;
+  const eyeMidY = (eyeL[1] + eyeR[1]) / 2;
+  const mouthMidX = (mouthL[0] + mouthR[0]) / 2;
+  const mouthMidY = (mouthL[1] + mouthR[1]) / 2;
+
+  // Derived ratios (dimensions: width for horizontal, height for vertical).
+  out[12] = Math.hypot(eyeL[0] - eyeR[0], eyeL[1] - eyeR[1]); // eye separation / face width
+  out[13] = Math.hypot(mouthL[0] - mouthR[0], mouthL[1] - mouthR[1]); // mouth width / face width
+  out[14] = Math.hypot(eyeMidX - mouthMidX, eyeMidY - mouthMidY); // eye→mouth / face height
+  out[15] = Math.hypot(nose[0] - mouthMidX, nose[1] - mouthMidY); // nose→mouth / face height
+
+  return out;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export type EmbeddingResult = {
@@ -135,11 +182,11 @@ export type EmbeddingResult = {
 } | null;
 
 /**
- * Crop the detected face from the source image, resize to 160×160, generate
- * a FaceNet embedding, and save a thumbnail for display.
+ * Crop the detected face, save a thumbnail, and compute the face fingerprint.
+ * Runs entirely on the JS thread — no native inference runtime is used.
  *
  * @param imageUri  Source photo URI (from expo-media-library).
- * @param face      Bounding box in original image pixel coordinates.
+ * @param face      Detected face (bounds + landmarks) in image pixels.
  * @param faceId    Unique ID for this face (used as thumbnail filename).
  */
 export async function getEmbedding(
@@ -148,10 +195,9 @@ export async function getEmbedding(
   faceId: string,
 ): Promise<EmbeddingResult> {
   try {
-    const { Tensor } = getOrt();
     const { x, y, width, height } = face.bounds;
 
-    // 20 % padding around the face for better embedding quality
+    // 20 % padding around the face for a more stable fingerprint.
     const pad = Math.max(width, height) * 0.2;
     const originX = Math.max(0, x - pad);
     const originY = Math.max(0, y - pad);
@@ -162,7 +208,7 @@ export async function getEmbedding(
       imageUri,
       [
         { crop: { originX, originY, width: cropW, height: cropH } },
-        { resize: { width: MODEL_INPUT_SIZE, height: MODEL_INPUT_SIZE } },
+        { resize: { width: THUMB_SIZE, height: THUMB_SIZE } },
       ],
       {
         format: ImageManipulator.SaveFormat.JPEG,
@@ -181,27 +227,20 @@ export async function getEmbedding(
       encoding: FileSystem.EncodingType.Base64,
     });
 
-    // ── Decode JPEG → RGBA pixels ─────────────────────────────────────────────
+    // ── Build fingerprint ─────────────────────────────────────────────────────
     const jpegBytes = base64ToBytes(base64);
     const decoded = jpeg.decode(jpegBytes, { useTArray: true });
 
-    // ── Build tensor ──────────────────────────────────────────────────────────
-    const float32 = rgbaToNchwFloat32(decoded.data, decoded.width, decoded.height);
-    const inputTensor = new Tensor("float32", float32, [
-      1,
-      3,
-      MODEL_INPUT_SIZE,
-      MODEL_INPUT_SIZE,
-    ]);
+    const gray = zScore(grayscaleGrid(decoded.data, decoded.width, decoded.height));
+    const edges = zScore(gradientMagnitude(gray));
+    const geometry = buildGeometry(face);
 
-    // ── Run inference ─────────────────────────────────────────────────────────
-    const sess = await loadSession();
-    const inputName = sess.inputNames[0];
-    const outputs = await sess.run({ [inputName]: inputTensor });
-    const outputName = sess.outputNames[0];
-    const raw = outputs[outputName].data as Float32Array;
+    const embedding = new Float32Array(FINGERPRINT_DIM);
+    embedding.set(gray, 0);
+    embedding.set(edges, GRID_DIMS);
+    embedding.set(geometry, GRID_DIMS * 2);
 
-    return { embedding: l2Normalize(new Float32Array(raw)), thumbUri };
+    return { embedding: l2Normalize(embedding), thumbUri };
   } catch {
     return null;
   }

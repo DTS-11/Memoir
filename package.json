@@ -1,6 +1,6 @@
 {
   "name": "memoir",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -40,7 +40,7 @@
     "expo-system-ui": "~56.0.5",
     "expo-video": "~56.1.2",
     "jpeg-js": "^0.4.4",
-    "onnxruntime-react-native": "^1.24.3",
+    "@react-native-ml-kit/face-detection": "^2.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",

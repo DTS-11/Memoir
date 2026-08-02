@@ -116,6 +116,15 @@ export const FaceDb = {
     return new Set(rows.map((r) => r.photo_id));
   },
 
+  async getAnyEmbeddingDim(): Promise<number | null> {
+    const d = await getDb();
+    const row = await d.getFirstAsync<{ embedding: Uint8Array }>(
+      `SELECT embedding FROM faces LIMIT 1`,
+    );
+    if (!row) return null;
+    return new Float32Array(new Uint8Array(row.embedding).buffer).length;
+  },
+
   async getAllFaces(): Promise<FaceRecord[]> {
     const d = await getDb();
     const rows = await d.getAllAsync<FaceRow>(

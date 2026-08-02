@@ -3,7 +3,7 @@
     "name": "Memoir",
     "slug": "memoir",
     "scheme": "memoir",
-    "version": "0.8.3",
+    "version": "0.8.4",
     "orientation": "portrait",
     "icon": "./assets/memoir_logo.png",
     "userInterfaceStyle": "automatic",
@@ -88,8 +88,7 @@
       "expo-asset"
     ],
     "assetBundlePatterns": [
-      "assets/**",
-      "assets/models/*"
+      "assets/**"
     ],
     "experiments": {
       "typedRoutes": true
