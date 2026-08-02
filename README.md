@@ -25,10 +25,12 @@ Memoir reimagines the local photo gallery as a clean, gesture-driven mobile app.
 - **Library zoom levels** — pinch in and out of Years, Months, Days, and All Photos. The grid restructures with each level, just like Apple Photos.
 - **Glass pill dock** — a compact two-icon frosted-glass dock centered at the bottom, with an animated focus indicator and haptic feedback.
 - **Full-screen viewer** — pinch zoom, double-tap zoom, two-finger pan, swipe-to-dismiss, and a scrubber for video and audio playback.
-- **Browse screen** — monthly Memories carousel, user Albums in a 3-column grid, smart Media Types list, semantic Utilities (Favorites / Archive / Recently Deleted), and a Categories drill-down — all behind a floating search bar.
+- **Browse screen** — on-device People grouping, monthly Memories carousel, user Albums in a 3-column grid, semantic Utilities (Favorites / Archive / Recently Deleted / Hidden), Categories drill-down, and media/date filter chips — all behind a floating search bar.
 - **Favorites** — heart any photo from the viewer or grid; view them in a dedicated screen.
 - **Archive** — hide photos from the main library; restore or permanently delete from the Archive screen.
 - **Recently Deleted** — a 30-day soft-delete buffer before anything is permanently removed.
+- **People** — on-device face detection groups the people in your library into named collections, each with its own photo grid. Rename anyone directly from their page, or browse everyone on the All-People grid.
+- **Hidden** — move private photos into a biometric-locked album (Face ID / fingerprint) that stays out of the main library.
 - **All file types** — photos, videos, audio, and unknown file types are all surfaced. Audio files play through the full-screen viewer with the same scrubber controls.
 - **Monochromatic theme** — black-and-white palette with semantic accents: red for delete, orange for archive, pink for favorites. Automatically follows system light/dark appearance.
 - **Sharing** — share any photo or video from the viewer or library grid using the native share sheet.
@@ -62,7 +64,7 @@ Memoir is a local-only gallery. No photos, accounts, telemetry, or analytics eve
 ### Permissions
 
 - **iOS** — `NSPhotoLibraryUsageDescription` is set in `app.json`. Memoir supports the system "Selected Photos" mode.
-- **Android** — declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, and the legacy `READ_EXTERNAL_STORAGE`. Adaptive icons are wired through the `expo.android` config.
+- **Android** — declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, `READ_MEDIA_VISUAL_USER_SELECTED`, and `ACCESS_MEDIA_LOCATION` for the gallery, plus `USE_BIOMETRIC` / `USE_FINGERPRINT` for the Hidden album.
 
 ### Tech Stack
 
@@ -73,6 +75,9 @@ Memoir is a local-only gallery. No photos, accounts, telemetry, or analytics eve
 | Animation & gestures | `react-native-reanimated` 4, `react-native-gesture-handler`, `react-native-worklets` |
 | Lists & images | `@shopify/flash-list`, `expo-image` |
 | Media access | `expo-media-library` (legacy API) |
+| Face detection & grouping | `@react-native-ml-kit/face-detection` (Google ML Kit) + a JS face fingerprint clustered with `density-clustering` |
+| Local storage | `expo-sqlite`, `@react-native-async-storage/async-storage`, `expo-file-system` |
+| Image processing | `expo-image-manipulator`, `jpeg-js` |
 | Playback | `expo-video` (handles both video and audio) |
 | Sharing | `expo-sharing` |
 | UI primitives | `expo-glass-effect`, `expo-blur`, `expo-haptics`, `expo-linear-gradient`, `@expo/vector-icons` |
@@ -179,7 +184,7 @@ Contributions, bug reports, and design feedback are all welcome. Memoir is inten
 
 **Areas that need help**
 
-- More smart albums (Live Photos detection, People, Places)
+- More smart albums (Live Photos detection, Places)
 - Real shared-element transition between grid and viewer
 - Accessibility pass (screen-reader labels, larger text support, reduce-motion)
 - iPad / large-screen layouts
