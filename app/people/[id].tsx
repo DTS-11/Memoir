@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../src/theme/ThemeProvider";
@@ -27,11 +27,18 @@ export default function PersonScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { photos } = usePhotos();
-  const { persons, renamePerson } = usePeople(photos);
+  const { persons, renamePerson, reload } = usePeople(photos);
 
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const inputRef = useRef<TextInput>(null);
+
+  // Refresh on focus so renames made here survive navigating away and back.
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload]),
+  );
 
   const person = useMemo(() => persons.find((p) => p.id === id), [persons, id]);
 

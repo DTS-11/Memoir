@@ -12,7 +12,7 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { addTabScrollToTopListener } from "../../src/hooks/useTabScrollToTop";
@@ -149,8 +149,24 @@ export default function BrowseScreen() {
     prevStatusRef.current = progress.status;
   }, [progress.status]);
 
+  // Refresh people when the tab regains focus (e.g. after renaming a person).
+  const firstFocusRef = React.useRef(true);
+  useFocusEffect(
+    React.useCallback(() => {
+      if (firstFocusRef.current) {
+        firstFocusRef.current = false;
+        return;
+      }
+      setPeopleRefresh((n) => n + 1);
+    }, []),
+  );
+
   const handlePersonPress = useCallback((person: PersonWithCover) => {
     router.push({ pathname: "/people/[id]", params: { id: person.id } });
+  }, []);
+
+  const openAllPeople = useCallback(() => {
+    router.push("/people");
   }, []);
 
   const handleStartScan = useCallback(() => {
@@ -286,7 +302,19 @@ export default function BrowseScreen() {
             {/* People */}
             {enabled && (
               <>
-                <SectionTitle title="People" />
+                <SectionTitle
+                  title="People"
+                  accessory={
+                    <View style={styles.albumsBadge}>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color={colors.textTertiary}
+                      />
+                    </View>
+                  }
+                  onPress={openAllPeople}
+                />
                 <PeopleSection
                   persons={persons}
                   loadingPeople={loadingPeople}
