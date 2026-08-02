@@ -20,6 +20,7 @@ import { useAlbums, type AlbumPreview } from "../../src/hooks/useAlbums";
 import { useMediaCounts } from "../../src/hooks/useMediaCounts";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { categories } from "../../src/utils/categories";
+import { photoToParams } from "../../src/utils/photoParams";
 import { GlassView } from "../../src/components/GlassView";
 import { PeopleSection } from "../../src/components/PeopleSection";
 import { semantic } from "../../src/theme/tokens";
@@ -49,9 +50,6 @@ const MONTH_NAMES = [
 function buildMemories(photos: Photo[]): Memory[] {
   const byMonth = new Map<string, Photo[]>();
   for (const p of photos) {
-    // SAF files get Date.now() as their timestamp when the filename has no
-    // parseable date — skip them so memory dates don't drift day-to-day.
-    if (p.id.startsWith("saf:")) continue;
     const d = new Date(p.creationTime);
     const k = `${d.getFullYear()}-${d.getMonth()}`;
     const arr = byMonth.get(k) ?? [];
@@ -260,7 +258,7 @@ export default function BrowseScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/photo/[id]",
-                      params: { id: p.id },
+                      params: { ...photoToParams(p) },
                     })
                   }
                   style={tileStyle}
@@ -550,7 +548,7 @@ const MemoryCard = memo(function MemoryCard({
 }) {
   const cover = memory.photos[0];
   const onPress = useCallback(() => {
-    if (cover) router.push({ pathname: "/photo/[id]", params: { id: cover.id } });
+    if (cover) router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } });
   }, [cover]);
   return (
     <Pressable

@@ -9,6 +9,7 @@ import { TopGlassBar } from "../../src/components/TopGlassBar";
 import { EmptyState } from "../../src/components/EmptyState";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { getCategory } from "../../src/utils/categories";
+import { photoToParams } from "../../src/utils/photoParams";
 
 export default function CategoryScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -23,7 +24,7 @@ export default function CategoryScreen() {
   );
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
+    router.push({ pathname: "/photo/[id]", params: { ...photoToParams(p) } });
   }, []);
 
   const headerHeight = insets.top + 64;

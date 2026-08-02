@@ -47,10 +47,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash.png",
-          "resizeMode": "cover",
+          "image": "./assets/memoir_logo.png",
+          "resizeMode": "contain",
           "backgroundColor": "#08080E",
-          "imageWidth": 240
+          "imageWidth": 160
         }
       ],
       [

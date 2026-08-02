@@ -30,6 +30,7 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { GlassView } from "../../src/components/GlassView";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
+import { photoFromParams } from "../../src/utils/photoParams";
 import { semantic } from "../../src/theme/tokens";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useEvent } from "expo";
@@ -40,17 +41,26 @@ type AssetDetails = Photo & {
 };
 
 export default function PhotoViewer() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<Record<string, string>>();
+  const id = params.id;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { photos, moveToRecentlyDeleted, toggleFavorite, favoriteIds, archivePhoto } =
     usePhotos();
   const listRef = useRef<FlatList<Photo>>(null);
 
-  const fallbackPhoto = useMemo(() => photos.find((p) => p.id === id), [id, photos]);
+  // The tapped photo may be passed along so the viewer can show it instantly,
+  // even before the library loads or when it isn't part of the main grid (e.g.
+  // opened from Archive or a filtered view).
+  const paramPhoto = useMemo(() => photoFromParams(params), [params]);
+  const fallbackPhoto = useMemo(
+    () => photos.find((p) => p.id === id) ?? paramPhoto,
+    [id, photos, paramPhoto],
+  );
+  const inLibrary = photos.some((p) => p.id === id);
   const [directPhoto, setDirectPhoto] = useState<Photo | null>(null);
   const data =
-    photos.length > 0
+    inLibrary
       ? photos
       : fallbackPhoto
         ? [fallbackPhoto]
@@ -139,7 +149,7 @@ export default function PhotoViewer() {
   }, [data.length, id]);
 
   useEffect(() => {
-    if (data.length > 0 || !id || id.startsWith("saf:")) return;
+    if (data.length > 0 || !id) return;
     MediaLibrary.getAssetInfoAsync(id)
       .then((info) => {
         if (!info) return;
@@ -168,10 +178,6 @@ export default function PhotoViewer() {
     if (!cur?.id) return;
     resetZoom();
     setInfoVisible(false);
-    if (cur.id.startsWith("saf:")) {
-      setDetails(cur);
-      return;
-    }
     MediaLibrary.getAssetInfoAsync(cur.id)
       .then((info) => {
         if (!info) return;
@@ -409,9 +415,7 @@ export default function PhotoViewer() {
     Haptics.selectionAsync();
 
     let srcUri: string | null = null;
-    if (current.id.startsWith("saf:")) {
-      srcUri = current.uri;
-    } else if (details?.localUri) {
+    if (details?.localUri) {
       srcUri = details.localUri;
     } else {
       const info = await MediaLibrary.getAssetInfoAsync(current.id).catch(() => null);

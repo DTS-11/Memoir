@@ -16,6 +16,7 @@ import { addTabScrollToTopListener } from "../../src/hooks/useTabScrollToTop";
 import { TopGlassBar } from "../../src/components/TopGlassBar";
 import { EmptyState } from "../../src/components/EmptyState";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
+import { photoToParams } from "../../src/utils/photoParams";
 
 type Memory = {
   id: string;
@@ -157,7 +158,7 @@ export default function ForYou() {
             <Pressable
               key={p.id}
               onPress={() =>
-                router.push({ pathname: "/photo/[id]", params: { id: p.id } })
+                router.push({ pathname: "/photo/[id]", params: { ...photoToParams(p) } })
               }
               style={[styles.feature, { backgroundColor: colors.thumbPlaceholder }]}
             >
@@ -180,7 +181,7 @@ function MemoryCard({ memory, width }: { memory: Memory; width: number }) {
   return (
     <Pressable
       onPress={() =>
-        cover && router.push({ pathname: "/photo/[id]", params: { id: cover.id } })
+        cover && router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } })
       }
       style={[styles.memCard, { width, height: width * 1.05 }]}
     >

@@ -1,5 +1,4 @@
 import * as MediaLibrary from "expo-media-library/legacy";
-import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
@@ -29,16 +28,9 @@ const PAGE_SIZE = 200;
 const RECENTLY_DELETED_KEY = "memoir.recentlyDeleted.v1";
 const FAVORITES_KEY = "memoir.favorites.v1";
 const ARCHIVE_KEY = "memoir.archived.v1";
-const SAF_MEDIA_URI_KEY = "memoir.safMediaUri.v1";
-const SAF_DISMISSED_KEY = "memoir.safDismissed.v1";
 // Legacy key from when Archive and Hidden were separate features.
 const LEGACY_HIDDEN_KEY = "memoir.hidden.v1";
-
-const MEDIA_EXTS = /\.(jpe?g|png|gif|heic|heif|tiff?|bmp|mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
-const VIDEO_EXTS = /\.(mp4|mov|avi|mkv|m4v|3gp|webm)$/i;
-// Directories that contain no user photos/videos worth indexing
-const SKIP_DIR_NAMES =
-  /sticker|document|audio|voice.?note|profile.?photo|status|wallpaper|animated.?gif|\bsent\b/i;
+const PERMISSION_ASKED_KEY = "memoir.permissionAsked.v1";
 
 // URI path segments that indicate sent/non-user media or system trash
 const EXCLUDED_URI_SEGMENTS =
@@ -49,85 +41,6 @@ function isExcludedMediaUri(uri: string): boolean {
   // Also reject clearly broken entries (DATA column was NULL → "file://null")
   if (decoded === "file://null" || decoded === "file://") return true;
   return EXCLUDED_URI_SEGMENTS.test(decoded);
-}
-
-function getSafFilename(uri: string): string {
-  const encoded = uri.split("%2F").pop() ?? uri.split("/").pop() ?? "";
-  return decodeURIComponent(encoded.replace(/\+/g, "%20"));
-}
-
-function parseFilenameTimestamp(filename: string): number {
-  // WhatsApp: IMG-YYYYMMDD-WA####.ext
-  const wa = filename.match(/[A-Za-z]+-(\d{8})-WA\d+\./i);
-  if (wa) {
-    const d = wa[1];
-    const t = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)).getTime();
-    if (t > 0) return t;
-  }
-  // Telegram: photo_YYYY-MM-DD_HH-MM-SS or video_YYYY-MM-DD_HH-MM-SS
-  const tg = filename.match(/\w+_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
-  if (tg) {
-    const t = new Date(+tg[1], +tg[2] - 1, +tg[3], +tg[4], +tg[5], +tg[6]).getTime();
-    if (t > 0) return t;
-  }
-  // 13-digit unix timestamp in filename
-  const ts = filename.match(/^(\d{13})\./);
-  if (ts) {
-    const t = +ts[1];
-    if (t > 1_000_000_000_000) return t;
-  }
-  return 0;
-}
-
-/**
- * Stable fallback timestamp for SAF files whose filenames carry no date.
- * Hashing the URI produces a value that won't change between app launches
- * (unlike Date.now()), so the file sorts consistently in the library.
- * The result is mapped to a plausible range (2010-2020) so it doesn't
- * appear at the very top or very bottom of the chronological list.
- */
-function stableTimestampFromUri(uri: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < uri.length; i++) {
-    h ^= uri.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  const RANGE_START = new Date(2010, 0, 1).getTime();
-  const RANGE_END = new Date(2020, 0, 1).getTime();
-  return RANGE_START + (Math.abs(h) % (RANGE_END - RANGE_START));
-}
-
-async function scanSafDir(dirUri: string, depth = 0): Promise<Photo[]> {
-  if (depth > 7) return [];
-  let entries: string[];
-  try {
-    entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(dirUri);
-  } catch {
-    return [];
-  }
-  const photos: Photo[] = [];
-  const subDirs: string[] = [];
-  for (const entry of entries) {
-    const filename = getSafFilename(entry);
-    if (!filename || filename.startsWith(".")) continue;
-    if (MEDIA_EXTS.test(filename)) {
-      photos.push({
-        id: `saf:${entry}`,
-        uri: entry,
-        width: 0,
-        height: 0,
-        creationTime: parseFilenameTimestamp(filename) || stableTimestampFromUri(entry),
-        duration: 0,
-        mediaType: VIDEO_EXTS.test(filename) ? "video" : "photo",
-        filename,
-      });
-    } else if (!SKIP_DIR_NAMES.test(filename)) {
-      subDirs.push(entry);
-    }
-  }
-  const subResults = await Promise.all(subDirs.map((dir) => scanSafDir(dir, depth + 1)));
-  for (const sub of subResults) photos.push(...sub);
-  return photos;
 }
 
 export type RecentlyDeletedPhoto = Photo & { deletedAt: number };
@@ -145,8 +58,6 @@ function mapPermission(res: MediaLibrary.PermissionResponse | null): PermissionS
 function usePhotosController() {
   const [permission, setPermission] = useState<PermissionState>("undetermined");
   const [rawPhotos, setRawPhotos] = useState<Photo[]>([]);
-  const [safPhotos, setSafPhotos] = useState<Photo[]>([]);
-  const [safNeedsPermission, setSafNeedsPermission] = useState(false);
   const [deletedItems, setDeletedItems] = useState<RecentlyDeletedPhoto[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
@@ -203,7 +114,20 @@ function usePhotosController() {
             mediaType: a.mediaType,
             filename: a.filename,
           }));
-        setRawPhotos((prev) => (replace ? mapped : [...prev, ...mapped]));
+        setRawPhotos((prev) => {
+          // Pagination can hand back duplicate assets when the library changes
+          // between page fetches. Duplicates break the grid's keyExtractor and
+          // make taps open the wrong photo, so dedupe by id, keeping first.
+          const merged = replace ? mapped : [...prev, ...mapped];
+          const seen = new Set<string>();
+          const deduped: Photo[] = [];
+          for (const p of merged) {
+            if (seen.has(p.id)) continue;
+            seen.add(p.id);
+            deduped.push(p);
+          }
+          return deduped;
+        });
         setTotalCount(result.totalCount);
         endCursorRef.current = result.endCursor;
         setHasMore(result.hasNextPage);
@@ -228,9 +152,23 @@ function usePhotosController() {
     await loadPage(undefined, true);
   }, [loadPage]);
 
+  // First launch: read the permission state and, if the app has never asked,
+  // request photo/video access automatically — no folder picker, like a normal
+  // gallery app. Only ever auto-asks once per install.
   useEffect(() => {
-    refreshPermission();
-  }, [refreshPermission]);
+    (async () => {
+      const res = await MediaLibrary.getPermissionsAsync();
+      const status = mapPermission(res);
+      setPermission(status);
+      if (status === "granted" || status === "limited") return;
+      const asked = await AsyncStorage.getItem(PERMISSION_ASKED_KEY).catch(() => null);
+      if (asked === "1") return;
+      await AsyncStorage.setItem(PERMISSION_ASKED_KEY, "1").catch(() => {});
+      if (res?.canAskAgain !== false) {
+        await requestPermission();
+      }
+    })();
+  }, [requestPermission]);
 
   useEffect(() => {
     AsyncStorage.getItem(RECENTLY_DELETED_KEY)
@@ -302,75 +240,19 @@ function usePhotosController() {
     return () => sub.remove();
   }, [refreshPermission, refresh]);
 
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-    (async () => {
-      try {
-        const [[, savedUri], [, dismissed]] = await AsyncStorage.multiGet([
-          SAF_MEDIA_URI_KEY,
-          SAF_DISMISSED_KEY,
-        ]);
-        if (dismissed === "1") return;
-        if (!savedUri) {
-          setSafNeedsPermission(true);
-          return;
-        }
-        const found = await scanSafDir(savedUri);
-        if (found.length > 0) {
-          setSafPhotos(found);
-        } else {
-          await AsyncStorage.removeItem(SAF_MEDIA_URI_KEY).catch(() => {});
-          setSafNeedsPermission(true);
-        }
-      } catch {}
-    })();
-  }, []);
-
-  const requestSafAccess = useCallback(async () => {
-    if (Platform.OS !== "android") return;
-    try {
-      const initialUri =
-        FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Android/media");
-      const result =
-        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(
-          initialUri,
-        );
-      if (result.granted) {
-        await AsyncStorage.setItem(SAF_MEDIA_URI_KEY, result.directoryUri).catch(
-          () => {},
-        );
-        setSafNeedsPermission(false);
-        const found = await scanSafDir(result.directoryUri);
-        setSafPhotos(found);
-      }
-    } catch {}
-  }, []);
-
-  const dismissSafPermission = useCallback(async () => {
-    setSafNeedsPermission(false);
-    await AsyncStorage.setItem(SAF_DISMISSED_KEY, "1").catch(() => {});
-  }, []);
-
   const deletedIds = useMemo(
     () => new Set(deletedItems.map((item) => item.id)),
     [deletedItems],
   );
 
-  const allRaw = useMemo(() => {
-    if (safPhotos.length === 0) return rawPhotos;
-    const mlUris = new Set(rawPhotos.map((p) => p.uri));
-    const uniqueSaf = safPhotos.filter((p) => !mlUris.has(p.uri));
-    return [...rawPhotos, ...uniqueSaf].sort((a, b) => b.creationTime - a.creationTime);
-  }, [rawPhotos, safPhotos]);
-
   const photos = useMemo(
-    () => allRaw.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
-    [allRaw, deletedIds, archivedIds],
+    () => rawPhotos.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
+    [rawPhotos, deletedIds, archivedIds],
   );
 
   const archivedPhotos = useMemo(
-    () => allRaw.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
-    [allRaw, archivedIds, deletedIds],
+    () => rawPhotos.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
+    [rawPhotos, archivedIds, deletedIds],
   );
 
   const favoritePhotos = useMemo(
@@ -417,12 +299,8 @@ function usePhotosController() {
 
   const deletePhotoForever = useCallback(
     async (id: string) => {
-      if (id.startsWith("saf:")) {
-        setSafPhotos((prev) => prev.filter((p) => p.id !== id));
-      } else {
-        await MediaLibrary.deleteAssetsAsync([id]).catch(() => {});
-        setRawPhotos((prev) => prev.filter((p) => p.id !== id));
-      }
+      await MediaLibrary.deleteAssetsAsync([id]).catch(() => {});
+      setRawPhotos((prev) => prev.filter((p) => p.id !== id));
       persistDeletedItems(deletedItems.filter((item) => item.id !== id));
     },
     [deletedItems, persistDeletedItems],
@@ -432,15 +310,8 @@ function usePhotosController() {
     async (ids: string[]) => {
       if (ids.length === 0) return;
       const idSet = new Set(ids);
-      const mediaIds = ids.filter((id) => !id.startsWith("saf:"));
-      const safIds = ids.filter((id) => id.startsWith("saf:"));
-      if (mediaIds.length > 0) {
-        await MediaLibrary.deleteAssetsAsync(mediaIds).catch(() => {});
-        setRawPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
-      }
-      if (safIds.length > 0) {
-        setSafPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
-      }
+      await MediaLibrary.deleteAssetsAsync(ids).catch(() => {});
+      setRawPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
       persistDeletedItems(deletedItems.filter((item) => !idSet.has(item.id)));
     },
     [deletedItems, persistDeletedItems],
@@ -509,10 +380,7 @@ function usePhotosController() {
       deletedItems,
       loading,
       hasMore,
-      totalCount: allRaw.length,
-      safNeedsPermission,
-      requestSafAccess,
-      dismissSafPermission,
+      totalCount: rawPhotos.length,
       requestPermission,
       refreshPermission,
       loadMore,
@@ -538,10 +406,7 @@ function usePhotosController() {
       deletedItems,
       loading,
       hasMore,
-      allRaw.length,
-      safNeedsPermission,
-      requestSafAccess,
-      dismissSafPermission,
+      rawPhotos.length,
       requestPermission,
       refreshPermission,
       loadMore,

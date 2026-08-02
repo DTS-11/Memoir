@@ -10,6 +10,7 @@ import { PhotoThumb } from "../src/components/PhotoThumb";
 import { EmptyState } from "../src/components/EmptyState";
 import type { GridItem } from "../src/utils/grouping";
 import { buildGrid } from "../src/utils/grouping";
+import { photoToParams } from "../src/utils/photoParams";
 
 const COLS = 3;
 
@@ -23,7 +24,7 @@ export default function FavoritesScreen() {
   const items = useMemo(() => buildGrid(favoritePhotos, "all"), [favoritePhotos]);
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
+    router.push({ pathname: "/photo/[id]", params: { ...photoToParams(p) } });
   }, []);
 
   const overrideItemLayout = useCallback((layout: { span?: number }, item: GridItem) => {

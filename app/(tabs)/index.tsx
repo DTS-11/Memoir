@@ -43,6 +43,7 @@ import {
   type LayoutFamily,
 } from "../../src/utils/grouping";
 import { addTabScrollToTopListener } from "../../src/hooks/useTabScrollToTop";
+import { photoToParams } from "../../src/utils/photoParams";
 import type { FlashListRef } from "@shopify/flash-list";
 import type { GridItem } from "../../src/utils/grouping";
 
@@ -67,9 +68,6 @@ export default function Library() {
     setFavoritesBulk,
     moveToRecentlyDeletedBulk,
     archivePhotosBulk,
-    safNeedsPermission,
-    requestSafAccess,
-    dismissSafPermission,
   } = usePhotos();
 
   const { width, height } = useWindowDimensions();
@@ -299,7 +297,10 @@ export default function Library() {
   );
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
+    router.push({
+      pathname: "/photo/[id]",
+      params: { ...photoToParams(p) },
+    });
   }, []);
 
   const selectedCount = selectedIds.size;
@@ -315,12 +316,8 @@ export default function Library() {
     }
 
     let srcUri: string | null = null;
-    if (item.id.startsWith("saf:")) {
-      srcUri = item.uri;
-    } else {
-      const info = await MediaLibrary.getAssetInfoAsync(item.id).catch(() => null);
-      srcUri = info?.localUri ?? item.uri ?? null;
-    }
+    const info = await MediaLibrary.getAssetInfoAsync(item.id).catch(() => null);
+    srcUri = info?.localUri ?? item.uri ?? null;
 
     if (!srcUri) {
       Alert.alert("Unable to Share", "Could not resolve local file path for this item.");
@@ -598,37 +595,6 @@ export default function Library() {
         </GlassView>
       </Animated.View>
 
-      {/* SAF access banner (Android only, shown until granted or dismissed) */}
-      {Platform.OS === "android" && safNeedsPermission && !inSelectMode && (
-        <View
-          style={[
-            styles.safBanner,
-            { bottom: insets.bottom + 100, backgroundColor: colors.surface },
-          ]}
-        >
-          <Ionicons
-            name="folder-open-outline"
-            size={20}
-            color={colors.accent}
-            style={{ marginTop: 1 }}
-          />
-          <Text
-            style={[typography.footnote, { color: colors.text, flex: 1, lineHeight: 18 }]}
-          >
-            Some app photos (e.g. WhatsApp) may be hidden.{" "}
-            <Text
-              style={{ color: colors.accent, fontWeight: "700" }}
-              onPress={requestSafAccess}
-            >
-              Allow folder access
-            </Text>
-          </Text>
-          <Pressable onPress={dismissSafPermission} hitSlop={12}>
-            <Ionicons name="close" size={18} color={colors.textSecondary} />
-          </Pressable>
-        </View>
-      )}
-
       {/* Pullable scrollbar — hidden in select mode */}
       {!inSelectMode && (
         <FastScrollBar
@@ -720,22 +686,5 @@ const styles = StyleSheet.create({
   toolbarLabel: {
     fontSize: 10,
     fontWeight: "600",
-  },
-  safBanner: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
 });

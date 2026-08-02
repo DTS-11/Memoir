@@ -9,6 +9,7 @@ import { PhotoGrid } from "../../src/components/PhotoGrid";
 import { TopGlassBar } from "../../src/components/TopGlassBar";
 import { EmptyState } from "../../src/components/EmptyState";
 import type { Photo } from "../../src/hooks/usePhotos";
+import { photoToParams } from "../../src/utils/photoParams";
 
 const PAGE_SIZE = 200;
 
@@ -43,7 +44,19 @@ export default function AlbumScreen() {
         mediaType: a.mediaType,
         filename: a.filename,
       }));
-      setPhotos((prev) => (endCursor ? [...prev, ...mapped] : mapped));
+      setPhotos((prev) => {
+        // Pagination can hand back duplicate assets when the library changes
+        // between page fetches; dedupe by id to keep grid keys and viewer taps stable.
+        const merged = endCursor ? [...prev, ...mapped] : mapped;
+        const seen = new Set<string>();
+        const deduped: Photo[] = [];
+        for (const p of merged) {
+          if (seen.has(p.id)) continue;
+          seen.add(p.id);
+          deduped.push(p);
+        }
+        return deduped;
+      });
       setEndCursor(res.endCursor);
       setHasMore(res.hasNextPage);
     } catch {
@@ -60,7 +73,7 @@ export default function AlbumScreen() {
   }, [id]);
 
   const onPressPhoto = useCallback((p: Photo) => {
-    router.push({ pathname: "/photo/[id]", params: { id: p.id } });
+    router.push({ pathname: "/photo/[id]", params: { ...photoToParams(p) } });
   }, []);
 
   const headerHeight = insets.top + 64;

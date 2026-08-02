@@ -15,8 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { GlassView } from "../../src/components/GlassView";
-import { usePhotos } from "../../src/hooks/usePhotos";
+import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { usePeople } from "../../src/hooks/usePeople";
+import { photoToParams } from "../../src/utils/photoParams";
 
 const COLUMNS = 3;
 
@@ -59,9 +60,11 @@ export default function PersonScreen() {
   const headerH = insets.top + 52;
 
   const renderItem = useCallback(
-    ({ item }: { item: { id: string; uri: string } }) => (
+    ({ item }: { item: Photo }) => (
       <Pressable
-        onPress={() => router.push({ pathname: "/photo/[id]", params: { id: item.id } })}
+        onPress={() =>
+          router.push({ pathname: "/photo/[id]", params: { ...photoToParams(item) } })
+        }
         style={{ width: tileSize, height: tileSize }}
       >
         <Image

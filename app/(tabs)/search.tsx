@@ -18,6 +18,7 @@ import { TopGlassBar } from "../../src/components/TopGlassBar";
 import { usePhotos, type Photo } from "../../src/hooks/usePhotos";
 import { EmptyState } from "../../src/components/EmptyState";
 import { categories } from "../../src/utils/categories";
+import { photoToParams } from "../../src/utils/photoParams";
 
 export default function SearchScreen() {
   const { colors, typography, isDark } = useTheme();
@@ -187,7 +188,7 @@ export default function SearchScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/photo/[id]",
-                      params: { id: p.id },
+                      params: { ...photoToParams(p) },
                     })
                   }
                   style={{ width: tileSize, height: tileSize, padding: 2 }}
