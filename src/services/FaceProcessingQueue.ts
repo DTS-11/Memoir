@@ -177,8 +177,6 @@ export async function runClustering(): Promise<void> {
     };
   });
 
-  await Promise.all([
-    FaceDb.updateFacePersonIds(assignments),
-    FaceDb.upsertPersons(persons),
-  ]);
+  await FaceDb.updateFacePersonIds(assignments);
+  await FaceDb.upsertPersons(persons);
 }
