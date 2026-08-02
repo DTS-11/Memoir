@@ -44,17 +44,28 @@ type Props = {
 const SectionHeader = memo(function SectionHeader({
   title,
   subtitle,
+  count,
 }: {
   title: string;
   subtitle?: string;
+  count?: number;
 }) {
   const { colors, typography } = useTheme();
   return (
     <View style={styles.header}>
-      <Text style={[typography.title3, { color: colors.text }]}>{title}</Text>
-      {!!subtitle && (
-        <Text style={[typography.subhead, { color: colors.textSecondary, marginTop: 2 }]}>
-          {subtitle}
+      <View style={styles.headerText}>
+        <Text style={[typography.title3, { color: colors.text }]}>{title}</Text>
+        {!!subtitle && (
+          <Text
+            style={[typography.subhead, { color: colors.textSecondary, marginTop: 2 }]}
+          >
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      {count !== undefined && (
+        <Text style={[typography.subhead, { color: colors.textSecondary }]}>
+          {count.toLocaleString()}
         </Text>
       )}
     </View>
@@ -182,7 +193,9 @@ export function PhotoGrid({
   const renderItem = useCallback<ListRenderItem<GridItem>>(({ item }) => {
     const rs = rsRef.current;
     if (item.type === "header") {
-      return <SectionHeader title={item.title} subtitle={item.subtitle} />;
+      return (
+        <SectionHeader title={item.title} subtitle={item.subtitle} count={item.count} />
+      );
     }
     const photo = item.photo;
     return (
@@ -248,8 +261,14 @@ export function PhotoGrid({
 
 const styles = StyleSheet.create({
   header: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 18,
     paddingBottom: 8,
+  },
+  headerText: {
+    flex: 1,
   },
 });

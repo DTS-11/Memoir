@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -67,14 +68,36 @@ function buildMemories(photos: Photo[]): Memory[] {
   });
 }
 
+type OnThisDayGroup = { year: number; photos: Photo[] };
+
+function buildOnThisDay(photos: Photo[]): OnThisDayGroup[] {
+  const now = new Date();
+  const groups = new Map<number, Photo[]>();
+  for (const p of photos) {
+    const d = new Date(p.creationTime);
+    if (d.getFullYear() >= now.getFullYear()) continue;
+    if (d.getMonth() !== now.getMonth() || d.getDate() !== now.getDate()) continue;
+    const arr = groups.get(d.getFullYear()) ?? [];
+    arr.push(p);
+    groups.set(d.getFullYear(), arr);
+  }
+  return Array.from(groups.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([year, arr]) => ({ year, photos: arr.slice(0, 20) }));
+}
+
 export default function ForYou() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { photos, permission } = usePhotos();
+  const { photos, favoritePhotos, permission } = usePhotos();
   const { width } = useWindowDimensions();
   const memories = useMemo(() => buildMemories(photos), [photos]);
+  const onThisDay = useMemo(() => buildOnThisDay(photos), [photos]);
   const enabled = permission === "granted" || permission === "limited";
   const scrollRef = useRef<ScrollView>(null);
+  const hero = memories[0];
+  const restMemories = memories.slice(1);
+  const featured = favoritePhotos.length > 0 ? favoritePhotos : photos;
 
   useEffect(() => {
     return addTabScrollToTopListener("for-you", () => {
@@ -116,24 +139,95 @@ export default function ForYou() {
           Memories
         </Text>
 
-        {memories.length === 0 ? (
+        {hero ? (
+          <>
+            <MemoryHero memory={hero} width={width - 32} />
+            {restMemories.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={(width - 32) * 0.68 + 12}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  gap: 12,
+                  marginTop: 12,
+                }}
+              >
+                {restMemories.map((m) => (
+                  <MemoryCard key={m.id} memory={m} width={(width - 32) * 0.68} />
+                ))}
+              </ScrollView>
+            )}
+          </>
+        ) : (
           <View style={{ paddingHorizontal: 16 }}>
             <Text style={[typography.body, { color: colors.textSecondary }]}>
-              Memories will appear here as your library grows.
+              Memories will appear here as your library grows — tap a month with several
+              photos and we'll surface it automatically.
             </Text>
           </View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            snapToInterval={width - 32 + 12}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
-          >
-            {memories.map((m) => (
-              <MemoryCard key={m.id} memory={m} width={width - 32} />
+        )}
+
+        {onThisDay.length > 0 && (
+          <>
+            <Text
+              style={[
+                typography.title2,
+                {
+                  color: colors.text,
+                  marginHorizontal: 16,
+                  marginTop: 28,
+                  marginBottom: 4,
+                },
+              ]}
+            >
+              On This Day
+            </Text>
+            {onThisDay.map((g) => (
+              <View key={g.year} style={styles.otdGroup}>
+                <Text
+                  style={[
+                    typography.subhead,
+                    {
+                      color: colors.textSecondary,
+                      marginHorizontal: 16,
+                      marginBottom: 8,
+                    },
+                  ]}
+                >
+                  {g.year} · {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+                >
+                  {g.photos.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/photo/[id]",
+                          params: { ...photoToParams(p) },
+                        })
+                      }
+                      style={[
+                        styles.feature,
+                        { backgroundColor: colors.thumbPlaceholder },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: p.uri }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                      />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
             ))}
-          </ScrollView>
+          </>
         )}
 
         <Text
@@ -147,14 +241,14 @@ export default function ForYou() {
             },
           ]}
         >
-          Featured Photos
+          {favoritePhotos.length > 0 ? "Favorites" : "Featured Photos"}
         </Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
         >
-          {photos.slice(0, 12).map((p) => (
+          {featured.slice(0, 12).map((p) => (
             <Pressable
               key={p.id}
               onPress={() =>
@@ -181,9 +275,14 @@ function MemoryCard({ memory, width }: { memory: Memory; width: number }) {
   return (
     <Pressable
       onPress={() =>
-        cover && router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } })
+        cover &&
+        router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } })
       }
-      style={[styles.memCard, { width, height: width * 1.05 }]}
+      style={({ pressed }) => [
+        styles.memCard,
+        { width, height: width * 1.0 },
+        pressed && { opacity: 0.85 },
+      ]}
     >
       {cover && (
         <Image
@@ -193,8 +292,8 @@ function MemoryCard({ memory, width }: { memory: Memory; width: number }) {
         />
       )}
       <LinearGradient
-        colors={["transparent", "rgba(0,0,0,0.7)"]}
-        style={[StyleSheet.absoluteFill, { top: "55%" }]}
+        colors={["transparent", "rgba(0,0,0,0.72)"]}
+        style={[StyleSheet.absoluteFill, { top: "50%" }]}
       />
       <View style={styles.memText}>
         <Text style={styles.memTitle}>{memory.title}</Text>
@@ -204,28 +303,110 @@ function MemoryCard({ memory, width }: { memory: Memory; width: number }) {
   );
 }
 
+function MemoryHero({ memory, width }: { memory: Memory; width: number }) {
+  const cover = memory.photos[0];
+  return (
+    <Pressable
+      onPress={() =>
+        cover &&
+        router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } })
+      }
+      style={({ pressed }) => [
+        styles.memHero,
+        { width, height: width * 1.15, marginHorizontal: 16 },
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      {cover && (
+        <Image
+          source={{ uri: cover.uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+      )}
+      <LinearGradient
+        colors={["transparent", "rgba(0,0,0,0.78)"]}
+        style={[StyleSheet.absoluteFill, { top: "42%" }]}
+      />
+      <View style={styles.memHeroText}>
+        <Text style={styles.memHeroEyebrow}>Memory Moment</Text>
+        <Text style={styles.memHeroTitle}>{memory.title}</Text>
+        <Text style={styles.memSubtitle}>{memory.subtitle}</Text>
+        <View style={styles.memHeroChip}>
+          <Ionicons name="play" size={12} color="#000" />
+          <Text style={styles.memHeroChipText}>View</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   memCard: {
-    borderRadius: 22,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#222",
+    justifyContent: "flex-end",
+  },
+  memHero: {
+    borderRadius: 24,
+    borderCurve: "continuous",
     overflow: "hidden",
     backgroundColor: "#222",
     justifyContent: "flex-end",
   },
   memText: {
-    padding: 20,
+    padding: 14,
   },
   memTitle: {
     color: "#FFF",
-    fontSize: 26,
+    fontSize: 18,
     fontWeight: "700",
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
   },
   memSubtitle: {
     color: "rgba(255,255,255,0.85)",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
-    marginTop: 4,
+    marginTop: 2,
+  },
+  memHeroText: {
+    padding: 20,
+  },
+  memHeroEyebrow: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase" as const,
+    marginBottom: 6,
+  },
+  memHeroTitle: {
+    color: "#FFF",
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+  },
+  memHeroChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 12,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  memHeroChipText: {
+    color: "#000",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  otdGroup: {
+    marginTop: 14,
+    gap: 8,
   },
   feature: {
     width: 140,

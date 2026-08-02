@@ -214,6 +214,7 @@ export default function BrowseScreen() {
   const openFavorites = useCallback(() => router.push("/favorites"), []);
   const openArchive = useCallback(() => router.push("/archive"), []);
   const openRecentlyDeleted = useCallback(() => router.push("/recently-deleted"), []);
+  const openHidden = useCallback(() => router.push("/hidden"), []);
 
   // top padding = safe area + search bar height + small gap
   const scrollTopPad = insets.top + SEARCH_BAR_H + 8;
@@ -373,7 +374,15 @@ export default function BrowseScreen() {
                 iconBg={semantic.deleteMuted}
                 label="Recently Deleted"
                 count={deletedItems.length}
+                divider
                 onPress={openRecentlyDeleted}
+              />
+              <UtilityRow
+                icon="eye-off"
+                iconColor={colors.accent}
+                iconBg={colors.accentMuted}
+                label="Hidden"
+                onPress={openHidden}
               />
             </View>
 
@@ -548,7 +557,8 @@ const MemoryCard = memo(function MemoryCard({
 }) {
   const cover = memory.photos[0];
   const onPress = useCallback(() => {
-    if (cover) router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } });
+    if (cover)
+      router.push({ pathname: "/photo/[id]", params: { ...photoToParams(cover) } });
   }, [cover]);
   return (
     <Pressable
@@ -635,7 +645,7 @@ const UtilityRow = memo(function UtilityRow({
   iconColor: string;
   iconBg: string;
   label: string;
-  count: number;
+  count?: number;
   coverUri?: string;
   divider?: boolean;
   onPress: () => void;
@@ -667,7 +677,7 @@ const UtilityRow = memo(function UtilityRow({
         )}
       </View>
       <Text style={[typography.body, { color: colors.text, flex: 1 }]}>{label}</Text>
-      {count > 0 && (
+      {count !== undefined && count > 0 && (
         <Text style={[typography.subhead, { color: colors.textSecondary }]}>{count}</Text>
       )}
       <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />

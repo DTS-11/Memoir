@@ -36,10 +36,7 @@ function SplashOverlay() {
 
   if (gone) return null;
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.splashOverlay, { opacity }]}
-    >
+    <Animated.View pointerEvents="none" style={[styles.splashOverlay, { opacity }]}>
       <Image
         source={require("../assets/memoir_logo.png")}
         style={styles.splashLogo}
@@ -84,6 +81,7 @@ function Root() {
         />
         <Stack.Screen name="favorites" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="archive" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="hidden" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="people/[id]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen
           name="permission"

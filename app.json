@@ -3,7 +3,7 @@
     "name": "Memoir",
     "slug": "memoir",
     "scheme": "memoir",
-    "version": "0.8.4",
+    "version": "0.8.5",
     "orientation": "portrait",
     "icon": "./assets/memoir_logo.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.memoir.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "icon": "./assets/memoir_logo.png",
       "adaptiveIcon": {
         "backgroundColor": "#000000",

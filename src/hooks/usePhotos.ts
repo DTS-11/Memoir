@@ -31,6 +31,7 @@ const ARCHIVE_KEY = "memoir.archived.v1";
 // Legacy key from when Archive and Hidden were separate features.
 const LEGACY_HIDDEN_KEY = "memoir.hidden.v1";
 const PERMISSION_ASKED_KEY = "memoir.permissionAsked.v1";
+const HIDDEN_KEY = "memoir.hiddenAlbum.v2";
 
 // URI path segments that indicate sent/non-user media or system trash
 const EXCLUDED_URI_SEGMENTS =
@@ -61,6 +62,7 @@ function usePhotosController() {
   const [deletedItems, setDeletedItems] = useState<RecentlyDeletedPhoto[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -219,6 +221,16 @@ function usePhotosController() {
   }, []);
 
   useEffect(() => {
+    AsyncStorage.getItem(HIDDEN_KEY)
+      .then((v) => {
+        if (!v) return;
+        const parsed = JSON.parse(v) as string[];
+        if (Array.isArray(parsed)) setHiddenIds(new Set(parsed));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (permission === "granted" || permission === "limited") refresh();
   }, [permission, refresh]);
 
@@ -246,13 +258,24 @@ function usePhotosController() {
   );
 
   const photos = useMemo(
-    () => rawPhotos.filter((p) => !deletedIds.has(p.id) && !archivedIds.has(p.id)),
-    [rawPhotos, deletedIds, archivedIds],
+    () =>
+      rawPhotos.filter(
+        (p) => !deletedIds.has(p.id) && !archivedIds.has(p.id) && !hiddenIds.has(p.id),
+      ),
+    [rawPhotos, deletedIds, archivedIds, hiddenIds],
   );
 
   const archivedPhotos = useMemo(
-    () => rawPhotos.filter((p) => archivedIds.has(p.id) && !deletedIds.has(p.id)),
-    [rawPhotos, archivedIds, deletedIds],
+    () =>
+      rawPhotos.filter(
+        (p) => archivedIds.has(p.id) && !deletedIds.has(p.id) && !hiddenIds.has(p.id),
+      ),
+    [rawPhotos, archivedIds, deletedIds, hiddenIds],
+  );
+
+  const hiddenPhotos = useMemo(
+    () => rawPhotos.filter((p) => hiddenIds.has(p.id) && !deletedIds.has(p.id)),
+    [rawPhotos, hiddenIds, deletedIds],
   );
 
   const favoritePhotos = useMemo(
@@ -301,6 +324,15 @@ function usePhotosController() {
     async (id: string) => {
       await MediaLibrary.deleteAssetsAsync([id]).catch(() => {});
       setRawPhotos((prev) => prev.filter((p) => p.id !== id));
+      setHiddenIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(next))).catch(
+          () => {},
+        );
+        return next;
+      });
       persistDeletedItems(deletedItems.filter((item) => item.id !== id));
     },
     [deletedItems, persistDeletedItems],
@@ -312,6 +344,19 @@ function usePhotosController() {
       const idSet = new Set(ids);
       await MediaLibrary.deleteAssetsAsync(ids).catch(() => {});
       setRawPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
+      setHiddenIds((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const id of ids) {
+          if (next.delete(id)) changed = true;
+        }
+        if (changed) {
+          AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(next))).catch(
+            () => {},
+          );
+        }
+        return next;
+      });
       persistDeletedItems(deletedItems.filter((item) => !idSet.has(item.id)));
     },
     [deletedItems, persistDeletedItems],
@@ -370,11 +415,41 @@ function usePhotosController() {
     });
   }, []);
 
+  const hidePhoto = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(next))).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const hidePhotosBulk = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(next))).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const unhidePhoto = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(next))).catch(() => {});
+      return next;
+    });
+  }, []);
+
   return useMemo(
     () => ({
       permission,
       photos,
       archivedPhotos,
+      hiddenPhotos,
+      hiddenIds,
       favoritePhotos,
       favoriteIds,
       deletedItems,
@@ -396,11 +471,16 @@ function usePhotosController() {
       archivePhoto,
       archivePhotosBulk,
       unarchivePhoto,
+      hidePhoto,
+      hidePhotosBulk,
+      unhidePhoto,
     }),
     [
       permission,
       photos,
       archivedPhotos,
+      hiddenPhotos,
+      hiddenIds,
       favoritePhotos,
       favoriteIds,
       deletedItems,
@@ -422,6 +502,9 @@ function usePhotosController() {
       archivePhoto,
       archivePhotosBulk,
       unarchivePhoto,
+      hidePhoto,
+      hidePhotosBulk,
+      unhidePhoto,
     ],
   );
 }

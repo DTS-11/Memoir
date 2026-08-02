@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -45,8 +46,16 @@ export default function PhotoViewer() {
   const id = params.id;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { photos, moveToRecentlyDeleted, toggleFavorite, favoriteIds, archivePhoto } =
-    usePhotos();
+  const {
+    photos,
+    moveToRecentlyDeleted,
+    toggleFavorite,
+    favoriteIds,
+    archivePhoto,
+    hiddenIds,
+    hidePhoto,
+    unhidePhoto,
+  } = usePhotos();
   const listRef = useRef<FlatList<Photo>>(null);
 
   // The tapped photo may be passed along so the viewer can show it instantly,
@@ -59,14 +68,13 @@ export default function PhotoViewer() {
   );
   const inLibrary = photos.some((p) => p.id === id);
   const [directPhoto, setDirectPhoto] = useState<Photo | null>(null);
-  const data =
-    inLibrary
-      ? photos
-      : fallbackPhoto
-        ? [fallbackPhoto]
-        : directPhoto
-          ? [directPhoto]
-          : [];
+  const data = inLibrary
+    ? photos
+    : fallbackPhoto
+      ? [fallbackPhoto]
+      : directPhoto
+        ? [directPhoto]
+        : [];
   const initialIndex = Math.max(
     0,
     data.findIndex((p) => p.id === id),
@@ -78,6 +86,9 @@ export default function PhotoViewer() {
   const [details, setDetails] = useState<AssetDetails | null>(fallbackPhoto ?? null);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [infoVisible, setInfoVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [slideshowActive, setSlideshowActive] = useState(false);
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const SLIDESHOW_INTERVAL_MS = 3000;
@@ -447,11 +458,87 @@ export default function PhotoViewer() {
     }
   }, [current, details]);
 
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(msg);
+    toastTimerRef.current = setTimeout(() => setToast(null), 1600);
+  }, []);
+
   const handleToggleFavorite = useCallback(() => {
     if (!current) return;
     Haptics.selectionAsync();
     toggleFavorite(current.id);
   }, [current, toggleFavorite]);
+
+  const resolveLocalUri = useCallback(async (): Promise<string | null> => {
+    if (!current) return null;
+    if (details?.localUri) return details.localUri;
+    const info = await MediaLibrary.getAssetInfoAsync(current.id).catch(() => null);
+    return info?.localUri ?? current.uri ?? null;
+  }, [current, details]);
+
+  const copyCurrent = useCallback(async () => {
+    if (!current) return;
+    Haptics.selectionAsync();
+    setMenuVisible(false);
+    const srcUri = await resolveLocalUri();
+    if (!srcUri) {
+      Alert.alert("Unable to Copy", "Could not resolve a local file path for this item.");
+      return;
+    }
+    try {
+      let copied = false;
+      if (current.mediaType === "photo") {
+        const finfo = await FileSystem.getInfoAsync(srcUri).catch(() => null);
+        const tooBig =
+          finfo?.exists === true &&
+          typeof finfo.size === "number" &&
+          finfo.size > 20 * 1024 * 1024;
+        if (!tooBig) {
+          const b64 = await FileSystem.readAsStringAsync(srcUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          }).catch(() => null);
+          if (b64) {
+            await Clipboard.setImageAsync(b64);
+            copied = true;
+          }
+        }
+      }
+      if (!copied) {
+        await Clipboard.setStringAsync(current.filename);
+      }
+      showToast("Copied to Clipboard");
+    } catch {
+      Alert.alert("Unable to Copy", "Could not copy this item.");
+    }
+  }, [current, resolveLocalUri, showToast]);
+
+  const handleHide = useCallback(() => {
+    if (!current) return;
+    setMenuVisible(false);
+    if (hiddenIds.has(current.id)) {
+      unhidePhoto(current.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Unhidden");
+      return;
+    }
+    Alert.alert(
+      "Hide Photo?",
+      "It will be removed from your library and only visible in Albums → Hidden, protected by your device lock.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Hide",
+          style: "destructive",
+          onPress: () => {
+            hidePhoto(current.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            router.back();
+          },
+        },
+      ],
+    );
+  }, [current, hiddenIds, hidePhoto, unhidePhoto, showToast]);
 
   const handleArchive = useCallback(() => {
     if (!current) return;
@@ -501,6 +588,7 @@ export default function PhotoViewer() {
       })
     : "";
   const isFavorite = current ? favoriteIds.has(current.id) : false;
+  const isHidden = current ? hiddenIds.has(current.id) : false;
 
   return (
     <View style={styles.root}>
@@ -620,7 +708,10 @@ export default function PhotoViewer() {
             </Pressable>
           )}
           <Pressable
-            onPress={() => setInfoVisible((v) => !v)}
+            onPress={() => {
+              setInfoVisible(false);
+              setMenuVisible((v) => !v);
+            }}
             hitSlop={12}
             style={styles.iconBtn}
           >
@@ -725,6 +816,58 @@ export default function PhotoViewer() {
           />
         </GlassView>
       </Animated.View>
+
+      {menuVisible && (
+        <View style={StyleSheet.absoluteFill}>
+          <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)} />
+          <GlassView
+            interactive
+            intensity={88}
+            style={[styles.menuSheet, { bottom: insets.bottom + 108 }]}
+          >
+            <Text style={styles.menuTitle} numberOfLines={1}>
+              {details?.filename || current?.filename}
+            </Text>
+            <MenuRow
+              icon="copy-outline"
+              label="Copy to Clipboard"
+              onPress={copyCurrent}
+            />
+            <MenuRow
+              icon={isHidden ? "eye-outline" : "eye-off-outline"}
+              label={isHidden ? "Unhide" : "Hide"}
+              onPress={handleHide}
+            />
+            <MenuRow
+              icon="information-circle-outline"
+              label="Info"
+              onPress={() => {
+                setMenuVisible(false);
+                setInfoVisible(true);
+              }}
+            />
+            <View style={styles.menuDivider} />
+            <MenuRow
+              icon="trash-outline"
+              label="Delete"
+              destructive
+              onPress={() => {
+                setMenuVisible(false);
+                deleteCurrent();
+              }}
+            />
+          </GlassView>
+        </View>
+      )}
+
+      {toast && (
+        <View
+          style={[styles.toast, { bottom: insets.bottom + 116 }]}
+          pointerEvents="none"
+        >
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -753,6 +896,30 @@ function ActionBtn({
       <Text style={[styles.actionLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>
+    </Pressable>
+  );
+}
+
+function MenuRow({
+  icon,
+  label,
+  onPress,
+  destructive,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  destructive?: boolean;
+}) {
+  const color = destructive ? semantic.delete : "#FFF";
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.5 }]}
+    >
+      <Ionicons name={icon} size={20} color={color} />
+      <Text style={[styles.menuRowText, { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -870,6 +1037,64 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 10.5,
+    fontWeight: "600",
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  menuSheet: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    borderRadius: 22,
+    borderCurve: "continuous",
+    paddingHorizontal: 8,
+    paddingTop: 14,
+    paddingBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  menuTitle: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  menuRowText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    marginHorizontal: 14,
+    marginVertical: 6,
+  },
+  toast: {
+    position: "absolute",
+    alignSelf: "center",
+    backgroundColor: "rgba(40,40,40,0.92)",
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderCurve: "continuous",
+  },
+  toastText: {
+    color: "#FFF",
+    fontSize: 13,
     fontWeight: "600",
   },
   infoPanel: {

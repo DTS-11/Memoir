@@ -33,8 +33,20 @@ export function canZoomOut(f: LayoutFamily): boolean {
 }
 
 export type GridItem =
-  | { type: "header"; id: string; title: string; subtitle?: string }
+  | { type: "header"; id: string; title: string; subtitle?: string; count?: number }
   | { type: "photo"; id: string; photo: Photo };
+
+/**
+ * Returns the index (in the GridItem[] array) of the first item whose id matches.
+ * Used to restore scroll position when switching between layout families, so the
+ * month/photo under your fingers stays put during a pinch zoom.
+ */
+export function gridIndexForPhoto(items: GridItem[], photoId: string): number {
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type === "photo" && items[i].id === photoId) return i;
+  }
+  return -1;
+}
 
 const monthNamesLong = [
   "January",
@@ -167,6 +179,12 @@ export function buildGrid(photos: Photo[], family: LayoutFamily): GridItem[] {
     if (key !== currentKey) {
       currentKey = key;
       items.push({ type: "header", id: `h:${key}`, title, subtitle });
+    }
+    // Headers are always followed by at least one photo; each photo in the same
+    // group bumps the count on the header that started the group.
+    const header = items[items.length - 1];
+    if (header.type === "header") {
+      header.count = (header.count ?? 0) + 1;
     }
     items.push({ type: "photo", id: photo.id, photo });
   }

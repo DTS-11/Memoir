@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -35,6 +36,7 @@ import { FastScrollBar } from "../../src/components/FastScrollBar";
 import {
   buildGrid,
   computeSectionOffsets,
+  gridIndexForPhoto,
   photoIndexFromTouch,
   DEFAULT_FAMILY,
   FAMILY_COLUMNS,
@@ -49,11 +51,21 @@ import type { GridItem } from "../../src/utils/grouping";
 
 const TOOLBAR_HEIGHT = 56;
 const FAMILY_KEY = "memoir.layoutFamily.v1";
+const MEDIA_FILTER_KEY = "memoir.mediaFilter.v1";
 const SELECT_BAR_SPRING = { damping: 22, stiffness: 280, mass: 0.8 } as const;
 const ZOOM_SPRING = { damping: 18, stiffness: 300, mass: 0.7 } as const;
+const CHIPS_H = 52;
 
 const PINCH_IN_THRESHOLD = 1.08; // intentionally low for effortless trigger
 const PINCH_OUT_THRESHOLD = 0.93;
+
+type MediaFilter = "all" | "photo" | "video";
+
+const MEDIA_FILTERS: { key: MediaFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "photo", label: "Photos" },
+  { key: "video", label: "Videos" },
+];
 
 export default function Library() {
   const { colors, typography } = useTheme();
@@ -61,13 +73,14 @@ export default function Library() {
   const {
     permission,
     photos,
-    totalCount,
+    loading,
     requestPermission,
     loadMore,
     favoriteIds,
     setFavoritesBulk,
     moveToRecentlyDeletedBulk,
     archivePhotosBulk,
+    hidePhotosBulk,
   } = usePhotos();
 
   const { width, height } = useWindowDimensions();
@@ -89,6 +102,24 @@ export default function Library() {
       .catch(() => {});
   }, []);
 
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
+
+  useEffect(() => {
+    AsyncStorage.getItem(MEDIA_FILTER_KEY)
+      .then((saved) => {
+        if (saved === "all" || saved === "photo" || saved === "video") {
+          setMediaFilter(saved);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filteredPhotos = useMemo(
+    () =>
+      mediaFilter === "all" ? photos : photos.filter((p) => p.mediaType === mediaFilter),
+    [photos, mediaFilter],
+  );
+
   const [inSelectMode, setInSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sectionTitle, setSectionTitle] = useState<string | null>(null);
@@ -106,8 +137,10 @@ export default function Library() {
   const contentHeightRef = useRef(1);
 
   const gridScale = useSharedValue(1);
+  const gridOpacity = useSharedValue(1);
   const hasTriggered = useSharedValue(false);
   const inSelectModeShared = useSharedValue(false);
+  const zoomAnchorRef = useRef<string | null>(null);
 
   useEffect(() => {
     inSelectModeShared.value = inSelectMode;
@@ -127,35 +160,61 @@ export default function Library() {
     toolbarOpacity.value = withTiming(inSelectMode ? 1 : 0, { duration: 150 });
   }, [inSelectMode, toolbarOffset, toolbarOpacity]);
 
-  const doZoomIn = useCallback(() => {
-    setFamily((f) => {
-      const next = zoomInFamily(f);
-      if (next !== f) {
-        Haptics.selectionAsync();
-        gridScale.value = withSequence(
-          withTiming(1.06, { duration: 80 }),
-          withSpring(1, ZOOM_SPRING),
-        );
-        AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
-      }
-      return next;
-    });
-  }, [gridScale]);
+  const captureZoomAnchor = useCallback((focalX: number, focalY: number) => {
+    const ps = photosRef.current;
+    if (ps.length === 0) return;
+    const idx = photoIndexFromTouch(
+      focalX,
+      focalY,
+      scrollYRef.current,
+      gridItemsRef.current,
+      tileSizeRef.current,
+      columnsRef.current,
+      headerHeightRef.current,
+    );
+    const photo = ps[Math.max(0, Math.min(idx, ps.length - 1))];
+    if (photo) zoomAnchorRef.current = photo.id;
+  }, []);
 
-  const doZoomOut = useCallback(() => {
-    setFamily((f) => {
-      const next = zoomOutFamily(f);
-      if (next !== f) {
-        Haptics.selectionAsync();
-        gridScale.value = withSequence(
-          withTiming(0.94, { duration: 80 }),
-          withSpring(1, ZOOM_SPRING),
-        );
-        AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
-      }
-      return next;
-    });
-  }, [gridScale]);
+  const doZoomIn = useCallback(
+    (focalX = width / 2, focalY = height / 2) => {
+      setFamily((f) => {
+        const next = zoomInFamily(f);
+        if (next !== f) {
+          Haptics.selectionAsync();
+          captureZoomAnchor(focalX, focalY);
+          gridScale.value = withSequence(
+            withTiming(1.06, { duration: 80 }),
+            withSpring(1, ZOOM_SPRING),
+          );
+          gridOpacity.value = withTiming(0.45, { duration: 70 });
+          AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
+        }
+        return next;
+      });
+    },
+    [captureZoomAnchor, gridScale, gridOpacity, height, width],
+  );
+
+  const doZoomOut = useCallback(
+    (focalX = width / 2, focalY = height / 2) => {
+      setFamily((f) => {
+        const next = zoomOutFamily(f);
+        if (next !== f) {
+          Haptics.selectionAsync();
+          captureZoomAnchor(focalX, focalY);
+          gridScale.value = withSequence(
+            withTiming(0.94, { duration: 80 }),
+            withSpring(1, ZOOM_SPRING),
+          );
+          gridOpacity.value = withTiming(0.45, { duration: 70 });
+          AsyncStorage.setItem(FAMILY_KEY, next).catch(() => {});
+        }
+        return next;
+      });
+    },
+    [captureZoomAnchor, gridScale, gridOpacity, height, width],
+  );
 
   const pinch = Gesture.Pinch()
     .onStart(() => {
@@ -167,15 +226,36 @@ export default function Library() {
       if (hasTriggered.value) return;
       if (e.scale > PINCH_IN_THRESHOLD) {
         hasTriggered.value = true;
-        runOnJS(doZoomIn)();
+        runOnJS(doZoomIn)(e.focalX, e.focalY);
       } else if (e.scale < PINCH_OUT_THRESHOLD) {
         hasTriggered.value = true;
-        runOnJS(doZoomOut)();
+        runOnJS(doZoomOut)(e.focalX, e.focalY);
       }
     })
     .onEnd(() => {
       gridScale.value = withSpring(1, ZOOM_SPRING);
     });
+
+  // After the grid rebuilds with a new layout, restore the scroll position so
+  // the section under the pinch stays on screen — like Apple Photos.
+  useEffect(() => {
+    const anchor = zoomAnchorRef.current;
+    if (anchor == null) return;
+    zoomAnchorRef.current = null;
+    const items = gridItemsRef.current;
+    const idx = gridIndexForPhoto(items, anchor);
+    if (idx < 0) return;
+    requestAnimationFrame(() => {
+      try {
+        gridRef.current?.scrollToIndex({
+          index: idx,
+          viewPosition: 0.5,
+          animated: false,
+        });
+      } catch {}
+    });
+    gridOpacity.value = withTiming(1, { duration: 140 });
+  }, [family, gridOpacity]);
 
   const inSelectModeRef = useRef(inSelectMode);
   inSelectModeRef.current = inSelectMode;
@@ -207,8 +287,8 @@ export default function Library() {
 
   const selectAll = useCallback(() => {
     Haptics.selectionAsync();
-    setSelectedIds(new Set(photos.map((p) => p.id)));
-  }, [photos]);
+    setSelectedIds(new Set(filteredPhotos.map((p) => p.id)));
+  }, [filteredPhotos]);
 
   const onLongPressPhoto = useCallback(
     (photo: Photo) => {
@@ -218,8 +298,8 @@ export default function Library() {
   );
 
   // Stable refs for use inside gesture callbacks (avoid stale closures)
-  const photosRef = useRef(photos);
-  photosRef.current = photos;
+  const photosRef = useRef(filteredPhotos);
+  photosRef.current = filteredPhotos;
   const gridItemsRef = useRef<typeof gridItems>([] as typeof gridItems);
   const columnsRef = useRef(0);
   const tileSizeRef = useRef(0);
@@ -396,6 +476,26 @@ export default function Library() {
     cancelSelectMode,
   ]);
 
+  const hideSelected = useCallback(() => {
+    if (!hasSelection) return;
+    Alert.alert(
+      `Hide ${selectedCount} Item${selectedCount === 1 ? "" : "s"}?`,
+      "They'll be removed from your library and only visible in Albums → Hidden, protected by your device lock.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Hide",
+          style: "destructive",
+          onPress: () => {
+            hidePhotosBulk(Array.from(selectedIds));
+            cancelSelectMode();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ],
+    );
+  }, [hasSelection, selectedCount, selectedIds, hidePhotosBulk, cancelSelectMode]);
+
   const allSelectedFavorited =
     hasSelection && Array.from(selectedIds).every((id) => favoriteIds.has(id));
 
@@ -403,7 +503,7 @@ export default function Library() {
     if (permission === "undetermined") requestPermission();
   }, [permission, requestPermission]);
 
-  const headerHeight = insets.top + 76;
+  const headerHeight = insets.top + 76 + CHIPS_H;
   const dockClearance = insets.bottom + 90;
 
   const handleSectionChange = useCallback((title: string, subtitle?: string) => {
@@ -427,7 +527,10 @@ export default function Library() {
   const columns = FAMILY_COLUMNS[family];
   const tileSize = width / columns;
 
-  const gridItems = useMemo(() => buildGrid(photos, family), [photos, family]);
+  const gridItems = useMemo(
+    () => buildGrid(filteredPhotos, family),
+    [filteredPhotos, family],
+  );
 
   // Keep refs in sync so drag gesture callbacks always see fresh values
   gridItemsRef.current = gridItems;
@@ -446,7 +549,7 @@ export default function Library() {
     (family === "all" ? "All Photos" : family.charAt(0).toUpperCase() + family.slice(1));
   const displaySub = sectionTitle
     ? sectionSub
-    : `${totalCount.toLocaleString()} item${totalCount === 1 ? "" : "s"}`;
+    : `${filteredPhotos.length.toLocaleString()} item${filteredPhotos.length === 1 ? "" : "s"}`;
   const selectToolbarBottom = insets.bottom + 80;
 
   const toolbarAnimStyle = useAnimatedStyle(() => ({
@@ -456,6 +559,7 @@ export default function Library() {
 
   const gridAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: gridScale.value }],
+    opacity: gridOpacity.value,
   }));
 
   if (permission === "undetermined") {
@@ -477,6 +581,22 @@ export default function Library() {
     );
   }
 
+  if (loading && photos.length === 0) {
+    return (
+      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+        <TopGlassBar title="Library" />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text
+            style={[typography.callout, { color: colors.textSecondary, marginTop: 14 }]}
+          >
+            Gathering your library…
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   if (photos.length === 0) {
     return (
       <View style={[styles.fill, { backgroundColor: colors.background }]}>
@@ -484,7 +604,25 @@ export default function Library() {
         <EmptyState
           icon="images-outline"
           title="No photos yet"
-          body="When you add photos to this device, they'll appear here."
+          body="When you add photos to this device, they'll appear here. Tap any empty space to refresh."
+        />
+      </View>
+    );
+  }
+
+  if (filteredPhotos.length === 0) {
+    return (
+      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+        <TopGlassBar title="Library" />
+        <EmptyState
+          icon={mediaFilter === "video" ? "videocam-outline" : "image-outline"}
+          title={`No ${mediaFilter}s found`}
+          body="Try a different filter or add more media to this device."
+          actionLabel="Show All"
+          onAction={() => {
+            setMediaFilter("all");
+            AsyncStorage.setItem(MEDIA_FILTER_KEY, "all").catch(() => {});
+          }}
         />
       </View>
     );
@@ -496,7 +634,7 @@ export default function Library() {
         <Animated.View style={[styles.fill, gridAnimStyle]}>
           <PhotoGrid
             listRef={gridRef}
-            photos={photos}
+            photos={filteredPhotos}
             family={family}
             onPressPhoto={onPressPhoto}
             onLongPressPhoto={onLongPressPhoto}
@@ -549,12 +687,44 @@ export default function Library() {
               <Text
                 style={[typography.body, { color: colors.accent, textAlign: "right" }]}
               >
-                {selectedCount === photos.length ? "None" : "All"}
+                {selectedCount === filteredPhotos.length ? "None" : "All"}
               </Text>
             </Pressable>
           </View>
         ) : (
-          <TopGlassBar title={displayTitle} subtitle={displaySub} />
+          <>
+            <TopGlassBar title={displayTitle} subtitle={displaySub} />
+            <View style={[styles.chipsRow, { backgroundColor: colors.background }]}>
+              {MEDIA_FILTERS.map((f) => {
+                const active = mediaFilter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setMediaFilter(f.key);
+                      AsyncStorage.setItem(MEDIA_FILTER_KEY, f.key).catch(() => {});
+                    }}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: active ? colors.accent : colors.accentMuted },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        typography.subhead,
+                        {
+                          color: active ? colors.background : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
         )}
       </View>
 
@@ -582,6 +752,13 @@ export default function Library() {
             icon="archive-outline"
             label="Archive"
             onPress={archiveSelected}
+            disabled={!hasSelection}
+            color={colors.text}
+          />
+          <ToolbarBtn
+            icon="eye-off-outline"
+            label="Hide"
+            onPress={hideSelected}
             disabled={!hasSelection}
             color={colors.text}
           />
@@ -662,6 +839,26 @@ const styles = StyleSheet.create({
   selectBarSide: {
     width: 70,
   },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 80,
+  },
   toolbar: {
     position: "absolute",
     left: 16,
@@ -679,9 +876,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    minWidth: 60,
+    minWidth: 56,
   },
   toolbarLabel: {
     fontSize: 10,
