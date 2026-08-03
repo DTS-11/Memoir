@@ -110,8 +110,11 @@ export const FaceDb = {
 
   async getScannedPhotoIds(): Promise<Set<string>> {
     const d = await getDb();
+    // Only "done" and "no_face" count as successfully processed. Photos marked
+    // "error" (e.g. a transient decode failure) must be retried on the next
+    // scan, otherwise the "Scan new photos" button would silently skip them.
     const rows = await d.getAllAsync<{ photo_id: string }>(
-      `SELECT photo_id FROM photo_scan`,
+      `SELECT photo_id FROM photo_scan WHERE status IN ('done','no_face')`,
     );
     return new Set(rows.map((r) => r.photo_id));
   },

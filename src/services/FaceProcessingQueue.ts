@@ -96,10 +96,17 @@ export async function runFaceScan(
               return;
             }
 
+            let failed = false;
             for (let fi = 0; fi < faces.length; fi++) {
               const faceId = `${photo.id}_f${fi}`;
               const result = await getEmbedding(photo.uri, faces[fi], faceId);
-              if (!result) continue;
+              if (!result) {
+                // A detected face that couldn't be embedded means the photo
+                // wasn't fully processed. Mark it "error" (not "done") so the
+                // next scan retries it instead of skipping it forever.
+                failed = true;
+                continue;
+              }
 
               const record: FaceRecord = {
                 id: faceId,
@@ -116,7 +123,7 @@ export async function runFaceScan(
               newFaces++;
             }
 
-            await FaceDb.setPhotoScanStatus(photo.id, "done");
+            await FaceDb.setPhotoScanStatus(photo.id, failed ? "error" : "done");
           } catch {
             await FaceDb.setPhotoScanStatus(photo.id, "error").catch(() => {});
           }

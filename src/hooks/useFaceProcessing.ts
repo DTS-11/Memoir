@@ -42,6 +42,18 @@ export function FaceProcessingProvider({ children }: { children: ReactNode }) {
     FaceDb.init().catch(() => {});
   }, []);
 
+  // When a scan finishes (or finds nothing new), show the result briefly, then
+  // fade back to the idle state so the "up to date" message doesn't linger.
+  useEffect(() => {
+    if (progress.status !== "done" && progress.status !== "up_to_date") return;
+    const t = setTimeout(() => {
+      setProgress((p) =>
+        p.status === "done" || p.status === "up_to_date" ? { ...p, status: "idle" } : p,
+      );
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [progress.status]);
+
   const startScan = useCallback((photos: Photo[]) => {
     if (isScanRunning()) return;
     photosRef.current = photos;

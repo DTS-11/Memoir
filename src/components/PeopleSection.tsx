@@ -39,6 +39,7 @@ export function PeopleSection({
 }: Props) {
   const { colors, typography } = useTheme();
   const isScanning = progress.status === "scanning" || progress.status === "clustering";
+  const showFeedback = isScanning || progress.status === "up_to_date";
 
   const scanPct =
     progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
@@ -117,8 +118,8 @@ export function PeopleSection({
 
   return (
     <View>
-      {/* Progress bar while scanning */}
-      {isScanning && (
+      {/* Progress bar while scanning (and the brief "up to date" result) */}
+      {showFeedback && (
         <ScanProgressRow progress={progress} scanPct={scanPct} onStopScan={onStopScan} />
       )}
 
@@ -233,19 +234,31 @@ function ScanProgressRow({
     width: `${barWidth.value}%`,
   }));
 
+  const isScanning = progress.status === "scanning" || progress.status === "clustering";
+
   const label =
-    progress.status === "clustering" ? "Grouping faces…" : `Scanning… ${scanPct}%`;
+    progress.status === "clustering"
+      ? "Grouping faces…"
+      : progress.status === "up_to_date"
+        ? "No new photos — everything is scanned"
+        : `Scanning… ${scanPct}%`;
 
   return (
     <GlassView intensity={70} bordered style={styles.progressContainer}>
       <View style={styles.progressTop}>
         <Animated.View entering={FadeInDown.springify().damping(20)}>
-          <Ionicons name="sparkles" size={18} color={colors.accent} />
+          <Ionicons
+            name={progress.status === "up_to_date" ? "checkmark-circle" : "sparkles"}
+            size={18}
+            color={colors.accent}
+          />
         </Animated.View>
         <Text style={[typography.subhead, { color: colors.text, flex: 1 }]}>{label}</Text>
-        <Pressable onPress={onStopScan} hitSlop={10}>
-          <Ionicons name="stop-circle" size={22} color={colors.textTertiary} />
-        </Pressable>
+        {isScanning && (
+          <Pressable onPress={onStopScan} hitSlop={10}>
+            <Ionicons name="stop-circle" size={22} color={colors.textTertiary} />
+          </Pressable>
+        )}
       </View>
       <View style={[styles.progressTrack, { backgroundColor: colors.accentMuted }]}>
         <Animated.View

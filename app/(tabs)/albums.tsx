@@ -85,8 +85,14 @@ type DateFilter = "7d" | "30d" | "year";
 export default function BrowseScreen() {
   const { colors, typography, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { permission, photos, favoritePhotos, archivedPhotos, deletedItems } =
-    usePhotos();
+  const {
+    permission,
+    photos,
+    favoritePhotos,
+    archivedPhotos,
+    deletedItems,
+    loadAllPhotos,
+  } = usePhotos();
   const enabled = permission === "granted" || permission === "limited";
   const { albums } = useAlbums(enabled);
   const { width } = useWindowDimensions();
@@ -170,8 +176,13 @@ export default function BrowseScreen() {
   }, []);
 
   const handleStartScan = useCallback(() => {
-    if (enabled) startScan(photos);
-  }, [enabled, startScan, photos]);
+    if (!enabled) return;
+    // Pull the freshest full library before scanning so new photos are always
+    // picked up, even if the on-screen list hasn't refreshed yet.
+    loadAllPhotos()
+      .then((fresh) => startScan(fresh))
+      .catch(() => startScan(photos));
+  }, [enabled, loadAllPhotos, startScan, photos]);
 
   const categoryCounts = useMemo(
     () =>

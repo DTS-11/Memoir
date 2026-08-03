@@ -44,6 +44,21 @@ function isExcludedMediaUri(uri: string): boolean {
   return EXCLUDED_URI_SEGMENTS.test(decoded);
 }
 
+function mapAssets(assets: MediaLibrary.Asset[]): Photo[] {
+  return assets
+    .filter((a) => !isExcludedMediaUri(a.uri))
+    .map((a) => ({
+      id: a.id,
+      uri: a.uri,
+      width: a.width,
+      height: a.height,
+      creationTime: a.creationTime,
+      duration: a.duration,
+      mediaType: a.mediaType,
+      filename: a.filename,
+    }));
+}
+
 export type RecentlyDeletedPhoto = Photo & { deletedAt: number };
 
 export type PermissionState = "undetermined" | "granted" | "limited" | "denied";
@@ -104,18 +119,7 @@ function usePhotosController() {
           sortBy: [[MediaLibrary.SortBy.creationTime, false]],
         });
         if (gen !== loadGenRef.current) return; // superseded by a newer refresh
-        const mapped: Photo[] = result.assets
-          .filter((a) => !isExcludedMediaUri(a.uri))
-          .map((a) => ({
-            id: a.id,
-            uri: a.uri,
-            width: a.width,
-            height: a.height,
-            creationTime: a.creationTime,
-            duration: a.duration,
-            mediaType: a.mediaType,
-            filename: a.filename,
-          }));
+        const mapped: Photo[] = mapAssets(result.assets);
         setRawPhotos((prev) => {
           // Pagination can hand back duplicate assets when the library changes
           // between page fetches. Duplicates break the grid's keyExtractor and
@@ -147,6 +151,35 @@ function usePhotosController() {
     if (!hasMore) return;
     await loadPage(endCursorRef.current, false);
   }, [hasMore, loadPage]);
+
+  /**
+   * Fetch the entire library fresh from the system, bypassing the paginated
+   * in-memory list. Used when a face scan needs to be certain it has seen every
+   * photo on the device (new ones may not have made it into the grid yet).
+   */
+  const loadAllPhotos = useCallback(async (): Promise<Photo[]> => {
+    if (permission !== "granted" && permission !== "limited") return [];
+    const all: Photo[] = [];
+    const seen = new Set<string>();
+    let after: string | undefined;
+    let hasNext = true;
+    while (hasNext) {
+      const result = await MediaLibrary.getAssetsAsync({
+        mediaType: ["photo", "video"],
+        first: PAGE_SIZE,
+        after,
+        sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      });
+      for (const p of mapAssets(result.assets)) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        all.push(p);
+      }
+      after = result.endCursor;
+      hasNext = result.hasNextPage;
+    }
+    return all;
+  }, [permission]);
 
   const refresh = useCallback(async () => {
     endCursorRef.current = undefined;
@@ -459,6 +492,7 @@ function usePhotosController() {
       requestPermission,
       refreshPermission,
       loadMore,
+      loadAllPhotos,
       refresh,
       moveToRecentlyDeleted,
       moveToRecentlyDeletedBulk,
@@ -490,6 +524,7 @@ function usePhotosController() {
       requestPermission,
       refreshPermission,
       loadMore,
+      loadAllPhotos,
       refresh,
       moveToRecentlyDeleted,
       moveToRecentlyDeletedBulk,
