@@ -84,6 +84,10 @@ function Root() {
         <Stack.Screen name="hidden" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="people/[id]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen
+          name="add-to-album"
+          options={{ presentation: "transparentModal", animation: "fade" }}
+        />
+        <Stack.Screen
           name="permission"
           options={{ presentation: "transparentModal", animation: "fade" }}
         />

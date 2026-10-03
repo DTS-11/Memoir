@@ -22,6 +22,7 @@ export type Photo = {
   duration: number;
   mediaType: MediaLibrary.MediaTypeValue;
   filename: string;
+  location?: { latitude: number; longitude: number } | null;
 };
 
 const PAGE_SIZE = 200;
@@ -56,6 +57,7 @@ function mapAssets(assets: MediaLibrary.Asset[]): Photo[] {
       duration: a.duration,
       mediaType: a.mediaType,
       filename: a.filename,
+      location: (a as any).location ?? null,
     }));
 }
 

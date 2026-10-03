@@ -27,7 +27,7 @@ export default function PersonScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { photos } = usePhotos();
-  const { persons, renamePerson, reload } = usePeople(photos);
+  const { persons, renamePerson, mergePerson, reload } = usePeople(photos);
 
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -59,30 +59,103 @@ export default function PersonScreen() {
 
   const commitRename = useCallback(async () => {
     const trimmed = nameInput.trim();
-    if (trimmed && id) await renamePerson(id, trimmed);
+    if (!trimmed || !id) {
+      setEditing(false);
+      return;
+    }
+
+    const existing = persons.find(
+      (p) => p.id !== id && p.name?.toLowerCase() === trimmed.toLowerCase(),
+    );
+
+    if (existing) {
+      Alert.alert(
+        "Merge People?",
+        `Do you want to merge this person into "${existing.name}"?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setEditing(false) },
+          {
+            text: "Merge",
+            style: "destructive",
+            onPress: async () => {
+              await mergePerson(id, existing.id);
+              router.back();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    await renamePerson(id, trimmed);
     setEditing(false);
-  }, [nameInput, id, renamePerson]);
+  }, [nameInput, id, renamePerson, persons, mergePerson]);
+
+  const [inSelectMode, setInSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = useCallback((photoId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+  }, []);
+
+  const handleRemoveSelected = useCallback(async () => {
+    if (!id || selectedIds.size === 0) return;
+    Alert.alert(
+      "Remove Faces?",
+      `Are you sure you want to remove ${selectedIds.size} photo(s) from this person?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Remove", 
+          style: "destructive",
+          onPress: async () => {
+            await removePersonPhotos(id, Array.from(selectedIds));
+            setInSelectMode(false);
+            setSelectedIds(new Set());
+          }
+        }
+      ]
+    );
+  }, [id, selectedIds, removePersonPhotos]);
 
   const tileSize = Math.floor(width / COLUMNS);
   const headerH = insets.top + 52;
 
   const renderItem = useCallback(
-    ({ item }: { item: Photo }) => (
-      <Pressable
-        onPress={() =>
-          router.push({ pathname: "/photo/[id]", params: { ...photoToParams(item) } })
-        }
-        style={{ width: tileSize, height: tileSize }}
-      >
-        <Image
-          source={{ uri: item.uri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          recyclingKey={item.id}
-        />
-      </Pressable>
-    ),
-    [tileSize],
+    ({ item }: { item: Photo }) => {
+      const isSelected = selectedIds.has(item.id);
+      return (
+        <Pressable
+          onLongPress={() => {
+            setInSelectMode(true);
+            toggleSelect(item.id);
+          }}
+          onPress={() => {
+            if (inSelectMode) toggleSelect(item.id);
+            else router.push({ pathname: "/photo/[id]", params: { ...photoToParams(item) } });
+          }}
+          style={{ width: tileSize, height: tileSize, padding: 1 }}
+        >
+          <Image
+            source={{ uri: item.uri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            recyclingKey={item.id}
+          />
+          {inSelectMode && (
+            <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+              {isSelected && <Ionicons name="checkmark" size={14} color="#000" />}
+            </View>
+          )}
+        </Pressable>
+      );
+    },
+    [tileSize, inSelectMode, selectedIds, toggleSelect],
   );
 
   if (!person) {
@@ -123,45 +196,94 @@ export default function PersonScreen() {
           { paddingTop: insets.top + 8, borderBottomColor: colors.glassBorder },
         ]}
       >
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.accent} />
-        </Pressable>
-
-        <View style={styles.titleArea}>
-          {editing ? (
-            <TextInput
-              ref={inputRef}
-              value={nameInput}
-              onChangeText={setNameInput}
-              onSubmitEditing={commitRename}
-              onBlur={commitRename}
-              returnKeyType="done"
-              style={[
-                typography.title3,
-                styles.nameInput,
-                { color: colors.text, borderBottomColor: colors.accent },
-              ]}
-              autoCapitalize="words"
-              maxLength={40}
-            />
-          ) : (
-            <Pressable onPress={() => setEditing(true)} style={styles.nameRow}>
-              <Text style={[typography.title3, { color: colors.text }]}>
-                {displayName}
-              </Text>
-              <Ionicons
-                name="pencil"
-                size={14}
-                color={colors.textTertiary}
-                style={{ marginLeft: 6, marginTop: 2 }}
-              />
+        {inSelectMode ? (
+          <>
+            <Pressable
+              onPress={() => {
+                setInSelectMode(false);
+                setSelectedIds(new Set());
+              }}
+              hitSlop={12}
+              style={styles.backBtn}
+            >
+              <Text style={[typography.body, { color: colors.accent }]}>Cancel</Text>
             </Pressable>
-          )}
-          <Text style={[typography.caption1, { color: colors.textSecondary }]}>
-            {personPhotos.length} photo{personPhotos.length !== 1 ? "s" : ""}
-          </Text>
-        </View>
+            <View style={styles.titleArea}>
+              <Text style={[typography.headline, { color: colors.text, textAlign: "center" }]}>
+                {selectedIds.size > 0 ? `${selectedIds.size} Selected` : "Select Photos"}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setSelectedIds(new Set(personPhotos.map((p) => p.id)))}
+              hitSlop={12}
+              style={[styles.backBtn, { minWidth: 60, alignItems: "flex-end" }]}
+            >
+              <Text style={[typography.body, { color: colors.accent }]}>All</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={24} color={colors.accent} />
+            </Pressable>
+
+            <View style={styles.titleArea}>
+              {editing ? (
+                <TextInput
+                  ref={inputRef}
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  onSubmitEditing={commitRename}
+                  onBlur={commitRename}
+                  returnKeyType="done"
+                  style={[
+                    typography.title3,
+                    styles.nameInput,
+                    { color: colors.text, borderBottomColor: colors.accent },
+                  ]}
+                  autoCapitalize="words"
+                  maxLength={40}
+                />
+              ) : (
+                <Pressable onPress={() => setEditing(true)} style={styles.nameRow}>
+                  <Text style={[typography.title3, { color: colors.text }]}>
+                    {displayName}
+                  </Text>
+                  <Ionicons
+                    name="pencil"
+                    size={14}
+                    color={colors.textTertiary}
+                    style={{ marginLeft: 6, marginTop: 2 }}
+                  />
+                </Pressable>
+              )}
+              <Text style={[typography.caption1, { color: colors.textSecondary }]}>
+                {personPhotos.length} photo{personPhotos.length !== 1 ? "s" : ""}
+              </Text>
+            </View>
+
+            <Pressable onPress={() => setInSelectMode(true)} hitSlop={12} style={styles.backBtn}>
+              <Text style={[typography.body, { color: colors.accent }]}>Select</Text>
+            </Pressable>
+          </>
+        )}
       </GlassView>
+
+      {inSelectMode && (
+        <View style={[styles.toolbar, { bottom: insets.bottom + 12 }]}>
+          <Pressable
+            onPress={handleRemoveSelected}
+            disabled={selectedIds.size === 0}
+            style={({ pressed }) => [
+              styles.toolbarBtn,
+              { opacity: selectedIds.size === 0 ? 0.4 : pressed ? 0.7 : 1 }
+            ]}
+          >
+            <Ionicons name="person-remove" size={20} color="#FF453A" />
+            <Text style={[typography.subhead, { color: "#FF453A", marginLeft: 8 }]}>Not This Person</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -194,5 +316,38 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     paddingVertical: 2,
     minWidth: 120,
+  },
+  checkCircle: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkCircleSelected: {
+    backgroundColor: "#FFF",
+    borderColor: "#FFF",
+  },
+  toolbar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(30,30,30,0.85)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  toolbarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });

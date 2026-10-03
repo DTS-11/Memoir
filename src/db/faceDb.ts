@@ -213,9 +213,57 @@ export const FaceDb = {
     ]);
   },
 
-  async deletePersonsNotIn(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
+  async mergePersons(sourceId: string, targetId: string): Promise<void> {
     const d = await getDb();
+    await d.withTransactionAsync(async () => {
+      await d.runAsync(`UPDATE faces SET person_id = ? WHERE person_id = ?`, [
+        targetId,
+        sourceId,
+      ]);
+      await d.runAsync(`DELETE FROM persons WHERE id = ?`, [sourceId]);
+      
+      const facesCount = await d.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM faces WHERE person_id = ?`,
+        [targetId]
+      );
+      if (facesCount) {
+        await d.runAsync(
+          `UPDATE persons SET face_count = ?, updated_at = ? WHERE id = ?`,
+          [facesCount.count, Date.now(), targetId]
+        );
+      }
+    });
+  },
+
+  async removeFacesFromPerson(personId: string, photoIds: string[]): Promise<void> {
+    if (!photoIds.length) return;
+    const d = await getDb();
+    await d.withTransactionAsync(async () => {
+      const placeholders = photoIds.map(() => "?").join(",");
+      await d.runAsync(
+        `UPDATE faces SET person_id = null WHERE person_id = ? AND photo_id IN (${placeholders})`,
+        [personId, ...photoIds]
+      );
+      
+      const facesCount = await d.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM faces WHERE person_id = ?`,
+        [personId]
+      );
+      if (facesCount) {
+        await d.runAsync(
+          `UPDATE persons SET face_count = ?, updated_at = ? WHERE id = ?`,
+          [facesCount.count, Date.now(), personId]
+        );
+      }
+    });
+  },
+
+  async deletePersonsNotIn(ids: string[]): Promise<void> {
+    const d = await getDb();
+    if (ids.length === 0) {
+      await d.runAsync(`DELETE FROM persons`);
+      return;
+    }
     const placeholders = ids.map(() => "?").join(",");
     await d.runAsync(`DELETE FROM persons WHERE id NOT IN (${placeholders})`, ids);
   },

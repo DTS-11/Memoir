@@ -430,6 +430,13 @@ export default function Library() {
     cancelSelectMode();
   }, [hasSelection, selectedIds, favoriteIds, setFavoritesBulk, cancelSelectMode]);
 
+  const addToAlbumSelected = useCallback(() => {
+    if (!hasSelection) return;
+    const ids = Array.from(selectedIds);
+    router.push({ pathname: "/add-to-album", params: { ids: JSON.stringify(ids) } });
+    cancelSelectMode();
+  }, [hasSelection, selectedIds, cancelSelectMode]);
+
   const archiveSelected = useCallback(() => {
     if (!hasSelection) return;
     Alert.alert(
@@ -738,6 +745,13 @@ export default function Library() {
             icon="share-outline"
             label="Share"
             onPress={shareSelected}
+            disabled={!hasSelection}
+            color={colors.text}
+          />
+          <ToolbarBtn
+            icon="add-circle-outline"
+            label="Add"
+            onPress={addToAlbumSelected}
             disabled={!hasSelection}
             color={colors.text}
           />

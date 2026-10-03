@@ -388,6 +388,14 @@ export default function BrowseScreen() {
             <SectionTitle title="Utilities" />
             <View style={[styles.list, { backgroundColor: colors.surfaceElevated }]}>
               <UtilityRow
+                icon="map"
+                iconColor={colors.accent}
+                iconBg={colors.accentMuted}
+                label="Map View"
+                divider
+                onPress={() => router.push("/map")}
+              />
+              <UtilityRow
                 icon="heart"
                 iconColor={semantic.favorite}
                 iconBg={semantic.favoriteMuted}

@@ -74,6 +74,25 @@ export function clusterFaces(
   const n = faces.length;
   const uf = new UnionFind(n);
 
+  // Pre-bind faces that already share the same person_id. This ensures that
+  // user-initiated manual merges stay together and aren't split back up by
+  // the clustering algorithm because their embedding distance is > epsilon.
+  const facesByPerson = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const pid = faces[i].person_id;
+    if (pid) {
+      const arr = facesByPerson.get(pid);
+      if (arr) arr.push(i);
+      else facesByPerson.set(pid, [i]);
+    }
+  }
+
+  for (const indices of facesByPerson.values()) {
+    for (let k = 1; k < indices.length; k++) {
+      uf.union(indices[0], indices[k]);
+    }
+  }
+
   for (let i = 0; i < n; i++) {
     const a = faces[i].embedding;
     for (let j = i + 1; j < n; j++) {
@@ -110,16 +129,23 @@ export function clusterFaces(
 
     let bestId: string | null = null;
     let bestVotes = 0;
+    let bestScore = -1;
     for (const [pid, count] of votes) {
-      if (count > bestVotes) {
-        bestVotes = count;
+      const p = existingPersons.find(x => x.id === pid);
+      // Give a massive boost if the person has a user-assigned name
+      const score = p?.name ? count + 1000000 : count;
+      if (score > bestScore) {
+        bestScore = score;
         bestId = pid;
+        bestVotes = count;
       }
     }
 
-    // Keep existing ID when ≥ 1/3 of cluster faces agree on it
+    // Keep existing ID when >= 1/3 of cluster faces agree on it,
+    // OR if the best ID has a user-defined name (which means we should definitely keep it to not lose the name).
+    const keepExisting = bestId != null && (bestScore >= 1000000 || bestVotes >= Math.max(1, faceIds.length / 3));
     const personId =
-      bestId != null && bestVotes >= Math.max(1, faceIds.length / 3)
+      keepExisting
         ? bestId
         : `person_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
 

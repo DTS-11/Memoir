@@ -104,5 +104,33 @@ export function useAlbums(enabled: boolean) {
     load();
   }, [load]);
 
-  return { albums, smart, loading, reload: load };
+  const createAlbum = useCallback(async (title: string, assetIds: string[]) => {
+    if (assetIds.length === 0) return null;
+    try {
+      const asset = await MediaLibrary.getAssetInfoAsync(assetIds[0]);
+      if (asset) {
+        const album = await MediaLibrary.createAlbumAsync(title, asset, false);
+        if (assetIds.length > 1) {
+          await MediaLibrary.addAssetsToAlbumAsync(assetIds.slice(1), album, false);
+        }
+        await load();
+        return album;
+      }
+    } catch {}
+    return null;
+  }, [load]);
+
+  const addToAlbum = useCallback(async (albumId: string, assetIds: string[]) => {
+    try {
+      // Find the actual MediaLibrary.Album object first
+      const rawAlbums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: false });
+      const album = rawAlbums.find(a => a.id === albumId);
+      if (album) {
+        await MediaLibrary.addAssetsToAlbumAsync(assetIds, album, false);
+        await load();
+      }
+    } catch {}
+  }, [load]);
+
+  return { albums, smart, loading, reload: load, createAlbum, addToAlbum };
 }

@@ -733,17 +733,26 @@ export default function PhotoViewer() {
             </Text>
           </View>
           {current?.mediaType === "photo" && (
-            <Pressable
-              onPress={slideshowActive ? stopSlideshow : startSlideshow}
-              hitSlop={12}
-              style={styles.iconBtn}
-            >
-              <Ionicons
-                name={slideshowActive ? "pause-circle-outline" : "play-circle-outline"}
-                size={28}
-                color="#FFF"
-              />
-            </Pressable>
+            <>
+              <Pressable
+                onPress={() => router.push(`/photo/edit?id=${current.id}` as any)}
+                hitSlop={12}
+                style={styles.iconBtn}
+              >
+                <Ionicons name="color-wand-outline" size={24} color="#FFF" />
+              </Pressable>
+              <Pressable
+                onPress={slideshowActive ? stopSlideshow : startSlideshow}
+                hitSlop={12}
+                style={styles.iconBtn}
+              >
+                <Ionicons
+                  name={slideshowActive ? "pause-circle-outline" : "play-circle-outline"}
+                  size={28}
+                  color="#FFF"
+                />
+              </Pressable>
+            </>
           )}
           <Pressable
             onPress={() => {

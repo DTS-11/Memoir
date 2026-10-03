@@ -52,5 +52,16 @@ export function usePeople(photos: Photo[], refreshTrigger?: number) {
     setPersons((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
   }, []);
 
-  return { persons, loading, reload: load, renamePerson };
+  const mergePerson = useCallback(async (sourceId: string, targetId: string) => {
+    await FaceDb.mergePersons(sourceId, targetId);
+    // Reload from DB to get the combined photos and updated face count
+    await load();
+  }, [load]);
+
+  const removePersonPhotos = useCallback(async (personId: string, photoIds: string[]) => {
+    await FaceDb.removeFacesFromPerson(personId, photoIds);
+    await load();
+  }, [load]);
+
+  return { persons, loading, reload: load, renamePerson, mergePerson, removePersonPhotos };
 }
