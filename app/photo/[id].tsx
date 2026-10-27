@@ -113,7 +113,7 @@ export default function PhotoViewer() {
 
   const videoPlayer = useVideoPlayer(null, (p) => {
     p.loop = false;
-    p.timeUpdateEventInterval = 0.25;
+    p.timeUpdateEventInterval = 1.0;
   });
   const { isPlaying: videoPlaying } = useEvent(videoPlayer, "playingChange", {
     isPlaying: videoPlayer.playing,
@@ -673,6 +673,8 @@ export default function PhotoViewer() {
                           {item.filename}
                         </Text>
                       </View>
+                    ) : item.mediaType === "video" ? (
+                      <View style={[styles.page, { width, height, backgroundColor: "#000" }]} />
                     ) : (
                       <Image
                         source={{
